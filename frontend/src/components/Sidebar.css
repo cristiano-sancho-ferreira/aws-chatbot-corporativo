@@ -1,0 +1,73 @@
+.sidebar {
+  width: 260px;
+  min-width: 260px;
+  background: var(--color-charcoal);
+  color: #f3ece3;
+  display: flex;
+  flex-direction: column;
+  padding: 20px 16px;
+}
+
+.sidebar-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+}
+
+.sidebar-brand-mark {
+  font-size: 22px;
+}
+
+.sidebar-brand-name {
+  font-family: var(--font-display);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.sidebar-new-btn {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-md);
+  background: var(--color-sauce);
+  color: #fff;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 11px 14px;
+  text-align: left;
+}
+
+.sidebar-new-btn:hover {
+  background: var(--color-sauce-dark);
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-charcoal-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sidebar-user {
+  margin: 0;
+  font-size: 12px;
+  color: #cbbfb2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar-logout {
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: #e8b4ab;
+  font-size: 13px;
+  padding: 0;
+}
+
+.sidebar-logout:hover {
+  text-decoration: underline;
+}

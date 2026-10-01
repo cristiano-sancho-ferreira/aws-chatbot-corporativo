@@ -1,0 +1,17 @@
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/**/*.tsbuildinfo
+frontend/*.tsbuildinfo
+
+# Terraform
+infra/.terraform/
+infra/.terraform.lock.hcl
+
+# OS / editor
+.DS_Store
+Thumbs.db
+
+# Logs
+npm-debug.log*
+*.log
