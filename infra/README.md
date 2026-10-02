@@ -10,7 +10,7 @@ terraform destroy -auto-approve -var-file="prd.tfvars"
 ===========================
 
 
-Agora você pode acessar o curso da DevOps na Nuvem e devorar todo o conteúdo já disponível! Abaixo está seu login e senha de acesso:
+
 
 
 
