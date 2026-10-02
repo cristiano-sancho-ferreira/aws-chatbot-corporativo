@@ -12,6 +12,6 @@ terraform destroy -auto-approve -var-file="prd.tfvars"
 
 Agora você pode acessar o curso da DevOps na Nuvem e devorar todo o conteúdo já disponível! Abaixo está seu login e senha de acesso:
 
-Email: cristiano.sancho.ferreira@gmail.com
-Senha: bdyxsBNy
-https://devops-na-nuvem.memberkit.com.br/280938-workshop-devops-na-nuvem-observabilidade
+
+
+
