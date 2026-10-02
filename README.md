@@ -1,43 +1,56 @@
 # AWS Chatbot Corporativo
 
-Projeto de chatbot empresarial com frontend em React e infraestrutura em Terraform para deploy em AWS. O repositório reúne a aplicação web e a base de provisionamento da infraestrutura necessária para hospedar a interface, autenticar usuários e conectar com um backend WebSocket em AWS.
+Este repositório reúne a aplicação web de um chatbot empresarial e a infraestrutura necessária para publicá-la na AWS. O projeto combina React + TypeScript no frontend com Terraform para provisionar a infraestrutura de hosting, autenticação e integração com serviços de backend.
 
 ## Visão geral
 
-A solução foi projetada para seguir a arquitetura abaixo:
+A solução foi pensada para seguir a arquitetura ilustrada abaixo:
 
 - Frontend estático em React + TypeScript
 - Autenticação com Amazon Cognito
-- Hosting via S3 + CloudFront
-- Comunicação em tempo real com backend via API Gateway WebSocket
+- Hospedagem via S3 + CloudFront
+- Comunicação em tempo real com API Gateway WebSocket
 - Persistência e processamento de mensagens com Lambda + DynamoDB
 - Integração com Amazon Bedrock AgentCore
 
 A referência visual da arquitetura está no arquivo [arquitetura-chatbot.drawio](arquitetura-chatbot.drawio).
 
-![Arquitetura do chatbot](arquitetura-chatbot.gif)
+<p align="center">
+  <img src="arquitetura-chatbot.gif" alt="Arquitetura do chatbot" width="980" />
+</p>
+
+### Legenda da arquitetura
+
+- Frontend: aplicação web hospedada em S3 e entregue por CloudFront
+- Cognito: autenticação de usuários e emissão de tokens
+- API Gateway WebSocket: canal de comunicação em tempo real
+- Lambda (Persist): recebe mensagens do usuário e grava no DynamoDB
+- DynamoDB: armazenamento das conversas e eventos do chat
+- Lambda (Processor): processa mensagens e integra com o agente
+- Bedrock AgentCore: execução do agente e ferramentas de IA
+- WAF e Route 53: proteção e acesso do sistema via domínio
 
 ## Stack principal
 
-- Frontend: React 18, TypeScript, Vite
+- Frontend: React 18, TypeScript e Vite
 - Autenticação: Amazon Cognito + amazon-cognito-identity-js
 - Infraestrutura: Terraform
-- Deploy frontend: S3 + CloudFront
+- Deploy do frontend: S3 + CloudFront
 - Comunicação: WebSocket via API Gateway
-- Integração IA: Amazon Bedrock AgentCore
+- Integração com IA: Amazon Bedrock AgentCore
 
 ## Estrutura do repositório
 
 ```text
 .
 ├── arquitetura-chatbot.drawio      # Diagrama da arquitetura
-├── frontend/                       # Aplicação web
+├── frontend/                       # Aplicação web do chatbot
 │   ├── public/
 │   ├── src/
 │   ├── package.json
 │   ├── vite.config.ts
 │   └── README.md
-├── infra/                          # Infraestrutura Terraform
+├── infra/                          # Infraestrutura em Terraform
 │   ├── _backend.tf
 │   ├── _provider.tf
 │   ├── _variables.tf
@@ -47,7 +60,8 @@ A referência visual da arquitetura está no arquivo [arquitetura-chatbot.drawio
 │   ├── outputs.tf
 │   ├── prd.tfvars
 │   └── README.md
-└── README.md                      # Este arquivo
+├── README.md                      # Documentação principal
+└── files/                         # Arquivos auxiliares e artefatos do projeto
 ```
 
 ## Como o frontend funciona
@@ -56,11 +70,11 @@ A aplicação em [frontend](frontend) implementa uma interface de chat com:
 
 - tela de login e cadastro
 - autenticação no Cognito
-- sessão do usuário salvas pelo SDK do Cognito
+- sessão do usuário gerenciada pelo SDK do Cognito
 - conexão WebSocket para envio e recebimento de mensagens em tempo real
-- renderização de mensagens do assistente
+- renderização das mensagens do assistente
 
-A configuração de ambiente é feita por variáveis com prefixo `VITE_`, como:
+A configuração de ambiente é feita por variáveis com prefixo `VITE_`, por exemplo:
 
 ```bash
 VITE_COGNITO_USER_POOL_ID
@@ -70,7 +84,7 @@ VITE_WS_URL
 VITE_ASSISTANT_NAME
 ```
 
-Essas variáveis são lidas em [frontend/src/config.ts](frontend/src/config.ts) e usadas no fluxo de autenticação e no socket do chat.
+Essas variáveis são lidas em [frontend/src/config.ts](frontend/src/config.ts) e usadas no fluxo de autenticação e na conexão do socket do chat.
 
 ## Requisitos
 
@@ -80,7 +94,7 @@ Antes de iniciar, certifique-se de ter instalado:
 - npm
 - Terraform
 - AWS CLI configurado com credenciais válidas
-- Acesso a uma conta AWS com permissão para criar recursos de S3, CloudFront, Cognito e Lambda (se a infraestrutura for provisionada localmente)
+- Acesso a uma conta AWS com permissões para criar recursos como S3, CloudFront, Cognito e Lambda
 
 ## Executando o frontend localmente
 
@@ -115,11 +129,11 @@ terraform plan -var-file="prd.tfvars"
 terraform apply -auto-approve -var-file="prd.tfvars"
 ```
 
-O Terraform também gera automaticamente o arquivo `.env` do frontend com os valores do Cognito e da URL do WebSocket, quando `auto_deploy` está habilitado.
+O Terraform também gera automaticamente o arquivo `.env` do frontend com os valores do Cognito e da URL do WebSocket quando `auto_deploy` está habilitado.
 
 ### Configuração principal
 
-Os parâmetros principais estão em [infra/_variables.tf](infra/_variables.tf) e incluem:
+Os principais parâmetros estão em [infra/_variables.tf](infra/_variables.tf), incluindo:
 
 - `region`
 - `environment`
@@ -144,28 +158,28 @@ O fluxo de deploy implementado em [infra/deploy.tf](infra/deploy.tf) executa aut
 2. sincronização do conteúdo em `dist` para o bucket S3
 3. invalidação do cache do CloudFront
 
-A infraestrutura cria um bucket S3 privado e restringe o acesso somente pela distribuição CloudFront via Origin Access Control, o que é o padrão seguro para hospedagem de sites estáticos.
+A infraestrutura cria um bucket S3 privado e restringe o acesso somente à distribuição CloudFront por meio de Origin Access Control, o que é o padrão recomendado para hospedagem de sites estáticos.
 
 ## Documentação complementar
 
-Para detalhes de uso do frontend e do Terraform, consulte:
+Para detalhes específicos do frontend e da infraestrutura, consulte:
 
 - [frontend/README.md](frontend/README.md)
 - [infra/README.md](infra/README.md)
 
 ## Observações importantes
 
-- O backend não está neste repositório em sua forma completa; o projeto assume um serviço WebSocket já existente ou em outro stack AWS.
+- O backend completo não está neste repositório; o projeto assume a existência de um serviço WebSocket já implementado ou em outro stack AWS.
 - O frontend depende de `VITE_WS_URL` e do `idToken` do Cognito para autenticar a conexão WebSocket.
 - O arquivo [arquitetura-chatbot.drawio](arquitetura-chatbot.drawio) é a referência mais completa da solução de arquitetura.
 
 ## Próximos passos recomendados
 
-- verificar se o backend WebSocket está realmente público ou protegido pela Lambda Authorizer
+- verificar se o backend WebSocket está protegido pela Lambda Authorizer
 - validar o fluxo de autenticação e login do Cognito em ambiente real
-- ajustar o nome do assistente e branding visual da aplicação
-- configurar DNS, certificado TLS e WAF conforme o ambiente de produção
+- ajustar o nome do assistente e a identidade visual da aplicação
+- configurar DNS, certificado TLS e WAF para produção
 
 ---
 
-Este repositório é uma base de referência para um chatbot corporativo em AWS com frontend moderno e infraestrutura automatizada em Terraform.
+Este repositório funciona como base para um chatbot corporativo em AWS, com frontend moderno e infraestrutura automatizada em Terraform.
