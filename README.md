@@ -15,6 +15,8 @@ A solução foi projetada para seguir a arquitetura abaixo:
 
 A referência visual da arquitetura está no arquivo [arquitetura-chatbot.drawio](arquitetura-chatbot.drawio).
 
+![Arquitetura do chatbot](arquitetura-chatbot.gif)
+
 ## Stack principal
 
 - Frontend: React 18, TypeScript, Vite
