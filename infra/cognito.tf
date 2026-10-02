@@ -8,7 +8,7 @@ resource "aws_cognito_user_pool" "users" {
   tags = local.common_tags
 
   # E-mail é o "username": login e cadastro usam o mesmo campo
-  username_attributes     = ["email"]
+  username_attributes      = ["email"]
   auto_verified_attributes = ["email"]
 
   # allow_admin_create_user_only = false é o que habilita o self sign-up.
@@ -34,20 +34,6 @@ resource "aws_cognito_user_pool" "users" {
     default_email_option = "CONFIRM_WITH_CODE"
     email_subject        = "Confirme seu cadastro"
     email_message        = "Seu código de confirmação é {####}"
-  }
-
-  schema {
-    name                = "email"
-    attribute_data_type = "String"
-    required            = true
-    mutable             = true
-  }
-
-  schema {
-    name                = "name"
-    attribute_data_type = "String"
-    required            = false
-    mutable             = true
   }
 
   account_recovery_setting {
@@ -76,9 +62,9 @@ resource "aws_cognito_user_pool_client" "spa" {
 
   prevent_user_existence_errors = "ENABLED"
 
-  access_token_validity  = 60   # minutos
-  id_token_validity      = 60   # minutos
-  refresh_token_validity = 30   # dias
+  access_token_validity  = 60 # minutos
+  id_token_validity      = 60 # minutos
+  refresh_token_validity = 30 # dias
 
   token_validity_units {
     access_token  = "minutes"

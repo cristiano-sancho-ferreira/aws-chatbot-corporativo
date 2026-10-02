@@ -18,6 +18,12 @@ export function useChatSocket(idToken: string | null, conversationId: string) {
   const pendingAssistantIdRef = useRef<string | null>(null)
 
   useEffect(() => {
+    setMessages([])
+    pendingAssistantIdRef.current = null
+    setConnectionState('connecting')
+  }, [conversationId])
+
+  useEffect(() => {
     if (!idToken) return
 
     const url = `${config.wsUrl}?token=${encodeURIComponent(idToken)}`

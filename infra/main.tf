@@ -4,8 +4,8 @@
 # ============================================================
 
 locals {
-  name_prefix   = "${var.organization_name}-${var.application_name}-${var.environment}-${data.aws_caller_identity.current.id}"
-  bucket_name   = "${local.name_prefix}-frontend"
+  name_prefix = "${var.organization_name}-${var.application_name}-${var.environment}-${data.aws_caller_identity.current.id}"
+  bucket_name = "${local.name_prefix}-frontend"
   common_tags = merge(
     var.common_tags,
     {
@@ -22,9 +22,9 @@ locals {
 # ============================================================
 
 resource "aws_s3_bucket" "chatbot_corp" {
-  bucket = "${local.bucket_name}"
+  bucket        = local.bucket_name
   force_destroy = true
-  tags = local.common_tags
+  tags          = local.common_tags
 }
 
 # Política do bucket: nega tudo, exceto leitura vinda da distribuição CloudFront abaixo.
@@ -58,7 +58,7 @@ resource "aws_cloudfront_distribution" "chatbot_corp" {
   is_ipv6_enabled     = true
   default_root_object = "index.html"
   comment             = "${local.name_prefix} - frontend do chatbot"
-  tags = local.common_tags
+  tags                = local.common_tags
 
   origin {
     domain_name              = aws_s3_bucket.chatbot_corp.bucket_regional_domain_name
@@ -71,7 +71,7 @@ resource "aws_cloudfront_distribution" "chatbot_corp" {
     cached_methods         = ["GET", "HEAD"]
     target_origin_id       = "s3-frontend"
     viewer_protocol_policy = "redirect-to-https"
-    compress                = true
+    compress               = true
 
     # Cache "managed" da AWS otimizado para conteúdo estático (CachingOptimized)
     cache_policy_id = "658327ea-f89d-4fab-a63d-7e88639e58f6"

@@ -24,8 +24,8 @@ resource "null_resource" "build_frontend" {
   count = var.auto_deploy ? 1 : 0
 
   triggers = {
-      always_run = timestamp()
-    }
+    always_run = timestamp()
+  }
 
   provisioner "local-exec" {
     working_dir = local.frontend_path
@@ -39,8 +39,8 @@ resource "null_resource" "sync_s3" {
 
   triggers = {
     bucket_name = aws_s3_bucket.chatbot_corp.bucket
-    source_hash = local.frontend_source_hash    
-    always_run = timestamp()
+    source_hash = local.frontend_source_hash
+    always_run  = timestamp()
   }
 
   provisioner "local-exec" {
@@ -58,7 +58,7 @@ resource "null_resource" "invalidate_cloudfront" {
   count = var.auto_deploy ? 1 : 0
 
   triggers = {
-    sync_id = null_resource.sync_s3[0].id      
+    sync_id    = null_resource.sync_s3[0].id
     always_run = timestamp()
   }
 
@@ -78,8 +78,8 @@ resource "local_file" "frontend_env" {
 
   filename = "${local.frontend_path}/.env"
   content  = <<-EOT
-    VITE_COGNITO_USER_POOL_ID=${var.manage_cognito_user_pool ? aws_cognito_user_pool.users[0].id : ""}
-    VITE_COGNITO_CLIENT_ID=${var.manage_cognito_user_pool ? aws_cognito_user_pool_client.spa[0].id : ""}
+    VITE_COGNITO_USER_POOL_ID=${var.manage_cognito_user_pool ? aws_cognito_user_pool.users[0].id : var.existing_user_pool_id}
+    VITE_COGNITO_CLIENT_ID=${var.manage_cognito_user_pool ? aws_cognito_user_pool_client.spa[0].id : var.existing_user_pool_client_id}
     VITE_COGNITO_REGION=${var.region}
     VITE_WS_URL=${var.ws_url}
     VITE_ASSISTANT_NAME=${var.assistant_name}

@@ -9,7 +9,8 @@ A solução foi pensada para seguir a arquitetura ilustrada abaixo:
 - Frontend estático em React + TypeScript
 - Autenticação com Amazon Cognito
 - Hospedagem via S3 + CloudFront
-- Comunicação em tempo real com API Gateway WebSocket
+- API Gateway WebSocket com Lambda Authorizer
+- Lambdas de conexão/desconexão com registro em DynamoDB
 - Persistência e processamento de mensagens com Lambda + DynamoDB
 - Integração com Amazon Bedrock AgentCore
 
@@ -24,11 +25,33 @@ A referência visual da arquitetura está no arquivo [arquitetura-chatbot.drawio
 - Frontend: aplicação web hospedada em S3 e entregue por CloudFront
 - Cognito: autenticação de usuários e emissão de tokens
 - API Gateway WebSocket: canal de comunicação em tempo real
+- Lambda Authorizer: valida o token do Cognito antes de permitir a conexão do cliente
+- Lambda Connect: registra a conexão do usuário no DynamoDB quando a sessão WebSocket é aberta
+- Lambda Disconnect: remove ou atualiza o estado da conexão quando o cliente fecha a sessão
+- DynamoDB: armazenamento das conexões ativas e das conversas/eventos do chat
 - Lambda (Persist): recebe mensagens do usuário e grava no DynamoDB
-- DynamoDB: armazenamento das conversas e eventos do chat
 - Lambda (Processor): processa mensagens e integra com o agente
 - Bedrock AgentCore: execução do agente e ferramentas de IA
 - WAF e Route 53: proteção e acesso do sistema via domínio
+
+### Fluxo de conexão e autenticação
+
+1. O usuário acessa o frontend e faz login no Cognito.
+2. O cliente abre uma conexão WebSocket para o API Gateway.
+3. O Lambda Authorizer valida o token antes de autorizar a conexão.
+4. O Lambda Connect registra a conexão ativa no DynamoDB.
+5. O cliente envia mensagens para o chat e o fluxo de persistência/processamento segue com os Lambdas e o agente de IA.
+6. Quando o usuário sai ou a conexão é encerrada, o Lambda Disconnect remove ou marca a sessão como finalizada.
+
+### API Gateway + WebSockets + Lambda
+
+O chatbot já está disponível globalmente e os usuários conseguem se autenticar. Mas, após enviar uma mensagem, como essa interação continua em tempo real?
+
+Para manter uma comunicação bidirecional entre cliente e servidor, usamos o API Gateway com WebSockets. Esse serviço mantém a conexão aberta com o usuário, permitindo envio e recebimento de mensagens sem a necessidade de servidores permanentemente ativos.
+
+As funções Lambda processam cada evento da aplicação, validam o contexto da conversa e executam a lógica de negócio. Já o Amazon DynamoDB armazena conexões ativas, mensagens e o estado das conversas, garantindo consistência e escalabilidade.
+
+Em resumo, o WebSocket mantém a conversa viva, o Lambda processa os eventos e o DynamoDB guarda o estado. Essa combinação permite que o chatbot atenda múltiplos usuários simultaneamente, em tempo real, com contexto e alta escalabilidade.
 
 ## Stack principal
 

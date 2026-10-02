@@ -5,6 +5,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: './', // caminhos relativos: importante para servir via S3/CloudFront em qualquer prefixo
+  define: {
+    global: 'globalThis',
+  },
   build: {
     outDir: 'dist',
     sourcemap: false,

@@ -45,9 +45,21 @@ variable "auto_deploy" {
 }
 
 variable "manage_cognito_user_pool" {
-  description = "Se true, este Terraform cria o Cognito User Pool com self sign-up habilitado. Se você já tem um User Pool configurado (ex.: criado manualmente), defina como false e preencha var.existing_user_pool_id / existing_user_pool_client_id só como referência, se quiser."
+  description = "Se true, este Terraform cria o Cognito User Pool com self sign-up habilitado. Se você já tem um User Pool configurado, defina como false e informe as IDs existentes abaixo."
   type        = bool
   default     = true
+}
+
+variable "existing_user_pool_id" {
+  description = "ID do User Pool Cognito existente quando manage_cognito_user_pool = false"
+  type        = string
+  default     = ""
+}
+
+variable "existing_user_pool_client_id" {
+  description = "ID do app client do User Pool Cognito existente quando manage_cognito_user_pool = false"
+  type        = string
+  default     = ""
 }
 
 variable "cognito_min_password_length" {

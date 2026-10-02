@@ -16,7 +16,11 @@ export function Sidebar({ onNewConversation }: SidebarProps) {
         <span className="sidebar-brand-name">{config.assistantName}</span>
       </div>
 
-      <button className="sidebar-new-btn" onClick={onNewConversation}>
+      <button
+        type="button"
+        className="sidebar-new-btn"
+        onClick={onNewConversation}
+      >
         + Nova conversa
       </button>
 
