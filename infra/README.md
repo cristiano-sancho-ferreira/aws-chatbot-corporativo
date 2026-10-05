@@ -21,4 +21,5 @@ O frontend usa automaticamente o endpoint WebSocket criado neste stack quando
 `sendMessage`, que invoca o Amazon Bedrock usando o modelo configurado em
 `bedrock_model_id` (padrão: `amazon.nova-lite-v1:0`). Antes de aplicar,
 confirme que esse modelo está disponível para sua conta e região. Cada chamada
-ao modelo pode gerar cobrança.
+ao modelo pode gerar cobrança. O authorizer da conexão WebSocket recebe o ID
+token Cognito pelo parâmetro `token` da URL.

@@ -8,7 +8,7 @@ import './ChatWindow.css'
 
 export function ChatWindow({ conversationId }: { conversationId: string }) {
   const { session } = useAuth()
-  const { messages, connectionState, sendMessage } = useChatSocket(
+  const { messages, connectionState, connectionError, sendMessage } = useChatSocket(
     session?.idToken ?? null,
     conversationId
   )
@@ -50,6 +50,12 @@ export function ChatWindow({ conversationId }: { conversationId: string }) {
           <MessageBubble key={m.id} message={m} />
         ))}
       </div>
+
+      {connectionError && (
+        <p className="chat-backend-pending" role="alert">
+          {connectionError}
+        </p>
+      )}
 
       {connectionState === 'local' && (
         <p className="chat-backend-pending">

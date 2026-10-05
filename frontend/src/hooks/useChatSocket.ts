@@ -13,6 +13,7 @@ export function useChatSocket(idToken: string | null, conversationId: string) {
   const [connectionState, setConnectionState] = useState<
     'connecting' | 'open' | 'closed' | 'error' | 'local'
   >(config.chatMessagesEnabled ? 'connecting' : 'local')
+  const [connectionError, setConnectionError] = useState<string | null>(null)
   const socketRef = useRef<WebSocket | null>(null)
   const pendingAssistantIdRef = useRef<string | null>(null)
 
@@ -20,6 +21,7 @@ export function useChatSocket(idToken: string | null, conversationId: string) {
     setMessages([])
     pendingAssistantIdRef.current = null
     setConnectionState(config.chatMessagesEnabled ? 'connecting' : 'local')
+    setConnectionError(null)
   }, [conversationId])
 
   useEffect(() => {
@@ -34,10 +36,26 @@ export function useChatSocket(idToken: string | null, conversationId: string) {
     const socket = new WebSocket(url)
     socketRef.current = socket
     setConnectionState('connecting')
+    setConnectionError(null)
 
     socket.onopen = () => setConnectionState('open')
-    socket.onclose = () => setConnectionState('closed')
-    socket.onerror = () => setConnectionState('error')
+    socket.onclose = (event) => {
+      if (event.code === 1000) {
+        setConnectionState('closed')
+        return
+      }
+
+      setConnectionState('error')
+      setConnectionError(
+        `A conexão WebSocket foi recusada ou interrompida (código ${event.code}). Confira o deploy do Terraform e a autorização Cognito.`
+      )
+    }
+    socket.onerror = () => {
+      setConnectionState('error')
+      setConnectionError(
+        'Não foi possível conectar ao WebSocket. Confira o endpoint e a autorização Cognito.'
+      )
+    }
 
     socket.onmessage = (event) => {
       let payload: IncomingWsMessage
@@ -153,5 +171,5 @@ export function useChatSocket(idToken: string | null, conversationId: string) {
     [conversationId, messages]
   )
 
-  return { messages, connectionState, sendMessage }
+  return { messages, connectionState, connectionError, sendMessage }
 }

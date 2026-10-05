@@ -189,6 +189,7 @@ resource "aws_lambda_function" "websocket_authorizer" {
   runtime          = "nodejs22.x"
   filename         = data.archive_file.websocket_authorizer_zip.output_path
   source_code_hash = data.archive_file.websocket_authorizer_zip.output_base64sha256
+  timeout          = 10
 
   environment {
     variables = {
@@ -265,11 +266,12 @@ resource "aws_apigatewayv2_api" "chat_websocket" {
 }
 
 resource "aws_apigatewayv2_authorizer" "chat_websocket_authorizer" {
-  api_id           = aws_apigatewayv2_api.chat_websocket.id
-  authorizer_type  = "REQUEST"
-  authorizer_uri   = aws_lambda_function.websocket_authorizer.invoke_arn
-  identity_sources = ["route.request.header.Authorization", "route.request.querystring.token"]
-  name             = "${local.name_prefix}-websocket-authorizer"
+  api_id                           = aws_apigatewayv2_api.chat_websocket.id
+  authorizer_type                  = "REQUEST"
+  authorizer_uri                   = aws_lambda_function.websocket_authorizer.invoke_arn
+  authorizer_result_ttl_in_seconds = 0
+  identity_sources                 = ["route.request.querystring.token"]
+  name                             = "${local.name_prefix}-websocket-authorizer"
 }
 
 resource "aws_apigatewayv2_integration" "connect_integration" {
@@ -328,7 +330,7 @@ resource "aws_lambda_permission" "authorizer_permission" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.websocket_authorizer.function_name
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_apigatewayv2_api.chat_websocket.execution_arn}/*/*"
+  source_arn    = "${aws_apigatewayv2_api.chat_websocket.execution_arn}/authorizers/${aws_apigatewayv2_authorizer.chat_websocket_authorizer.id}"
 }
 
 resource "aws_lambda_permission" "connect_permission" {
