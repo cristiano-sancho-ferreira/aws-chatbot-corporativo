@@ -69,7 +69,7 @@ variable "cognito_min_password_length" {
 }
 
 variable "ws_url" {
-  description = "URL do WebSocket do backend (API Gateway), ex.: wss://xxxx.execute-api.us-east-1.amazonaws.com/prod. Vem de outro Terraform/stack, fora deste projeto."
+  description = "URL opcional de um WebSocket externo com processamento de mensagens. Vazia, usa o endpoint WebSocket criado neste stack."
   type        = string
   default     = ""
 }

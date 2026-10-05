@@ -32,12 +32,19 @@ VITE_COGNITO_USER_POOL_ID=us-east-1_XXXXXXXXX
 VITE_COGNITO_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxx
 VITE_COGNITO_REGION=us-east-1
 VITE_WS_URL=wss://xxxxxxxxxx.execute-api.us-east-1.amazonaws.com/prod
+VITE_CHAT_MESSAGES_ENABLED=true
 VITE_ASSISTANT_NAME=Assistente da Mama Pizzaria
 ```
 
 Essas variáveis são injetadas **em build-time**. Se precisar trocar o backend
 por ambiente (dev/prod), gere builds separados com `.env.production` /
 `.env.staging` ou use `vite build --mode staging`.
+
+`VITE_CHAT_MESSAGES_ENABLED` deve ser `true` somente quando o endpoint tiver
+uma rota `sendMessage` integrada a um processador de mensagens. A API WebSocket
+criada pelo Terraform neste repositório ainda implementa apenas conexão e
+desconexão. Nesse caso, o chat funciona em modo local: permite digitar e exibe
+as mensagens na tela, mas não as envia ao backend nem gera respostas.
 
 ## 2. Rodar localmente
 

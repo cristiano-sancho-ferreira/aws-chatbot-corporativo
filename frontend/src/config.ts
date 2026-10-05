@@ -6,6 +6,7 @@ export const config = {
     region: import.meta.env.VITE_COGNITO_REGION as string,
   },
   wsUrl: import.meta.env.VITE_WS_URL as string,
+  chatMessagesEnabled: import.meta.env.VITE_CHAT_MESSAGES_ENABLED === 'true',
   assistantName:
     (import.meta.env.VITE_ASSISTANT_NAME as string) || 'Assistente virtual',
 }

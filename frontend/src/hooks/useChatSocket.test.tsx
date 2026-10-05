@@ -4,8 +4,14 @@ import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { useChatSocket } from './useChatSocket'
 
+const { config } = vi.hoisted(() => ({
+  config: { wsUrl: '', chatMessagesEnabled: false },
+}))
+
+vi.mock('../config', () => ({ config }))
+
 describe('useChatSocket', () => {
-  it('reseta as mensagens ao trocar de conversa', () => {
+  it('exibe mensagens localmente sem abrir um WebSocket', () => {
     class MockWebSocket {
       static OPEN = 1
       readyState = MockWebSocket.OPEN
@@ -26,11 +32,17 @@ describe('useChatSocket', () => {
       { initialProps: { conversationId: 'conversation-1' } }
     )
 
+    expect(result.current.connectionState).toBe('local')
+
     act(() => {
       result.current.sendMessage('Olá')
     })
 
     expect(result.current.messages).toHaveLength(1)
+    expect(result.current.messages[0]).toMatchObject({
+      role: 'user',
+      content: 'Olá',
+    })
 
     rerender({ conversationId: 'conversation-2' })
 

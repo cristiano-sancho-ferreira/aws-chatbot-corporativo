@@ -20,10 +20,12 @@ export function ChatWindow({ conversationId }: { conversationId: string }) {
 
   const statusLabel =
     connectionState === 'open'
-      ? 'Modo demonstração'
-      : connectionState === 'connecting'
-        ? 'Conectando…'
-        : 'Desconectado'
+      ? 'Conectado'
+      : connectionState === 'local'
+        ? 'Modo local'
+        : connectionState === 'connecting'
+          ? 'Conectando…'
+          : 'Desconectado'
 
   return (
     <div className="chat-window">
@@ -49,9 +51,16 @@ export function ChatWindow({ conversationId }: { conversationId: string }) {
         ))}
       </div>
 
+      {connectionState === 'local' && (
+        <p className="chat-backend-pending">
+          Modo local: as mensagens aparecem apenas nesta tela e não são enviadas
+          ao backend.
+        </p>
+      )}
+
       <MessageInput
         onSend={sendMessage}
-        disabled={connectionState !== 'open'}
+        disabled={connectionState !== 'open' && connectionState !== 'local'}
       />
     </div>
   )

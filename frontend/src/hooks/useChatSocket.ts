@@ -12,19 +12,24 @@ function newId() {
 export function useChatSocket(idToken: string | null, conversationId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [connectionState, setConnectionState] = useState<
-    'connecting' | 'open' | 'closed' | 'error'
-  >('connecting')
+    'connecting' | 'open' | 'closed' | 'error' | 'local'
+  >(config.chatMessagesEnabled ? 'connecting' : 'local')
   const socketRef = useRef<WebSocket | null>(null)
   const pendingAssistantIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     setMessages([])
     pendingAssistantIdRef.current = null
-    setConnectionState('connecting')
+    setConnectionState(config.chatMessagesEnabled ? 'connecting' : 'local')
   }, [conversationId])
 
   useEffect(() => {
     if (!idToken) return
+    if (!config.chatMessagesEnabled) {
+      socketRef.current = null
+      setConnectionState('local')
+      return
+    }
 
     const url = `${config.wsUrl}?token=${encodeURIComponent(idToken)}`
     const socket = new WebSocket(url)
@@ -101,7 +106,22 @@ export function useChatSocket(idToken: string | null, conversationId: string) {
   const sendMessage = useCallback(
     (content: string) => {
       const trimmed = content.trim()
-      if (!trimmed || socketRef.current?.readyState !== WebSocket.OPEN) return
+      if (!trimmed) return
+
+      if (!config.chatMessagesEnabled) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: newId(),
+            role: 'user',
+            content: trimmed,
+            createdAt: Date.now(),
+          },
+        ])
+        return
+      }
+
+      if (socketRef.current?.readyState !== WebSocket.OPEN) return
 
       setMessages((prev) => [
         ...prev,

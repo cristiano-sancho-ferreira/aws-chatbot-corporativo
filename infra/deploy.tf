@@ -31,6 +31,8 @@ resource "null_resource" "build_frontend" {
     working_dir = local.frontend_path
     command     = "npm install && npm run build"
   }
+
+  depends_on = [local_file.frontend_env]
 }
 
 # 2. Sincroniza o build (dist/) com o bucket S3 do frontend
@@ -70,9 +72,9 @@ resource "null_resource" "invalidate_cloudfront" {
 }
 
 
-# Gera o .env do frontend com os valores reais do Cognito criado acima
-# (e o ws_url do backend, que você preenche em terraform.tfvars), pra não
-# precisar copiar/colar outputs manualmente antes de cada build.
+# Gera o .env do frontend com os valores reais do Cognito e do WebSocket.
+# Sem ws_url externo, usa a API criada neste stack; nesse caso, o processamento
+# de mensagens permanece desabilitado até existir uma rota sendMessage funcional.
 resource "local_file" "frontend_env" {
   count = var.auto_deploy ? 1 : 0
 
@@ -81,7 +83,8 @@ resource "local_file" "frontend_env" {
     VITE_COGNITO_USER_POOL_ID=${var.manage_cognito_user_pool ? aws_cognito_user_pool.users[0].id : var.existing_user_pool_id}
     VITE_COGNITO_CLIENT_ID=${var.manage_cognito_user_pool ? aws_cognito_user_pool_client.spa[0].id : var.existing_user_pool_client_id}
     VITE_COGNITO_REGION=${var.region}
-    VITE_WS_URL=${var.ws_url}
+    VITE_WS_URL=${var.ws_url != "" ? var.ws_url : aws_apigatewayv2_stage.chat_websocket_stage.invoke_url}
+    VITE_CHAT_MESSAGES_ENABLED=${var.ws_url != "" ? "true" : "false"}
     VITE_ASSISTANT_NAME=${var.assistant_name}
   EOT
 }
