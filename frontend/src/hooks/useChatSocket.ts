@@ -6,9 +6,8 @@ function newId() {
   return crypto.randomUUID()
 }
 
-// Conecta ao API Gateway (WebSockets) do diagrama, autenticado com o idToken do Cognito.
-// A Lambda "Persist" grava cada turno no DynamoDB; o "Processor" lê o Stream e repassa
-// os chunks do Bedrock AgentCore de volta por este mesmo socket.
+// Conecta ao API Gateway WebSocket com o idToken do Cognito e envia as mensagens
+// com o histórico recente para a Lambda que chama o Amazon Bedrock.
 export function useChatSocket(idToken: string | null, conversationId: string) {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [connectionState, setConnectionState] = useState<
@@ -47,7 +46,12 @@ export function useChatSocket(idToken: string | null, conversationId: string) {
       } catch {
         return
       }
-      if (payload.conversationId !== conversationId) return
+      if (
+        payload.conversationId !== conversationId &&
+        payload.type !== 'error'
+      ) {
+        return
+      }
 
       if (payload.type === 'chunk') {
         setMessages((prev) => {
@@ -137,10 +141,16 @@ export function useChatSocket(idToken: string | null, conversationId: string) {
         action: 'sendMessage',
         conversationId,
         content: trimmed,
+        history: messages
+          .slice(-10)
+          .map(({ role, content: messageContent }) => ({
+            role,
+            content: messageContent,
+          })),
       }
       socketRef.current.send(JSON.stringify(outgoing))
     },
-    [conversationId]
+    [conversationId, messages]
   )
 
   return { messages, connectionState, sendMessage }

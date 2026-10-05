@@ -1,8 +1,8 @@
 # Chat da Pizzaria — Frontend (React + TypeScript)
 
 Frontend de chatbot com login, feito para ser hospedado como site estático em
-**S3 + CloudFront**, conversando com o backend do diagrama:
-`API Gateway (WebSockets) → Lambda (Persist) → DynamoDB → Lambda (Processor) → Bedrock AgentCore`,
+**S3 + CloudFront**, conversando com o backend:
+`API Gateway (WebSockets) → Lambda → Amazon Bedrock Converse API`,
 com autenticação via **Cognito User Pool** validada pela `Lambda (Authorizer)`.
 
 ## Estrutura
@@ -11,7 +11,7 @@ com autenticação via **Cognito User Pool** validada pela `Lambda (Authorizer)`
 src/
   auth/            # Cognito (login, sessão) via amazon-cognito-identity-js
   hooks/
-    useChatSocket.ts  # conexão WebSocket + streaming de respostas
+    useChatSocket.ts  # conexão WebSocket, envio e recebimento de respostas
   components/
     LoginScreen.tsx
     Sidebar.tsx
@@ -40,11 +40,9 @@ Essas variáveis são injetadas **em build-time**. Se precisar trocar o backend
 por ambiente (dev/prod), gere builds separados com `.env.production` /
 `.env.staging` ou use `vite build --mode staging`.
 
-`VITE_CHAT_MESSAGES_ENABLED` deve ser `true` somente quando o endpoint tiver
-uma rota `sendMessage` integrada a um processador de mensagens. A API WebSocket
-criada pelo Terraform neste repositório ainda implementa apenas conexão e
-desconexão. Nesse caso, o chat funciona em modo local: permite digitar e exibe
-as mensagens na tela, mas não as envia ao backend nem gera respostas.
+`VITE_CHAT_MESSAGES_ENABLED` deve ser `true` quando o endpoint tiver uma rota
+`sendMessage` integrada ao processador do chat. O Terraform deste repositório
+cria essa rota e uma Lambda que invoca o modelo configurado no Bedrock.
 
 ## 2. Rodar localmente
 
@@ -57,18 +55,19 @@ npm run dev
 
 **Envio (front → API Gateway WebSocket):**
 ```json
-{ "action": "sendMessage", "conversationId": "uuid", "content": "texto do usuário" }
+{ "action": "sendMessage", "conversationId": "uuid", "content": "texto do usuário", "history": [] }
 ```
 
-**Recebimento (Lambda Processor → front, via Stream do DynamoDB):**
+**Recebimento (Lambda → front):**
 ```json
 { "type": "chunk", "conversationId": "uuid", "messageId": "uuid", "content": "pedaço da resposta" }
 { "type": "done", "conversationId": "uuid" }
 { "type": "error", "conversationId": "uuid", "error": "mensagem de erro" }
 ```
 
-Ajuste `src/types.ts` e `src/hooks/useChatSocket.ts` se o formato real das
-suas Lambdas for diferente — é só esse arquivo que precisa mudar.
+O frontend envia até as últimas 10 mensagens para dar contexto ao modelo. A
+resposta é entregue como uma mensagem completa (não token a token). O histórico
+fica apenas em memória no navegador.
 
 A autenticação no WebSocket é feita passando o `idToken` do Cognito como
 query string (`?token=...`), validado pela `Lambda (Authorizer)` no

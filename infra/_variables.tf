@@ -69,9 +69,15 @@ variable "cognito_min_password_length" {
 }
 
 variable "ws_url" {
-  description = "URL opcional de um WebSocket externo com processamento de mensagens. Vazia, usa o endpoint WebSocket criado neste stack."
+  description = "URL opcional de um WebSocket externo com processamento de mensagens. Vazia, usa o endpoint deste stack."
   type        = string
   default     = ""
+}
+
+variable "bedrock_model_id" {
+  description = "ID do modelo Amazon Bedrock usado para responder às mensagens"
+  type        = string
+  default     = "amazon.nova-lite-v1:0"
 }
 
 variable "assistant_name" {

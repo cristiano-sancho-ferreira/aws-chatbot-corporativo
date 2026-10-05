@@ -11,8 +11,8 @@ A solução foi pensada para seguir a arquitetura ilustrada abaixo:
 - Hospedagem via S3 + CloudFront
 - API Gateway WebSocket com Lambda Authorizer
 - Lambdas de conexão/desconexão com registro em DynamoDB
-- Persistência e processamento de mensagens com Lambda + DynamoDB
-- Integração com Amazon Bedrock AgentCore
+- Processamento de mensagens em uma Lambda
+- Integração direta com a Converse API do Amazon Bedrock
 
 A referência visual da arquitetura está no arquivo [arquitetura-chatbot.drawio](arquitetura-chatbot.drawio).
 
@@ -28,10 +28,9 @@ A referência visual da arquitetura está no arquivo [arquitetura-chatbot.drawio
 - Lambda Authorizer: valida o token do Cognito antes de permitir a conexão do cliente
 - Lambda Connect: registra a conexão do usuário no DynamoDB quando a sessão WebSocket é aberta
 - Lambda Disconnect: remove ou atualiza o estado da conexão quando o cliente fecha a sessão
-- DynamoDB: armazenamento das conexões ativas e das conversas/eventos do chat
-- Lambda (Persist): recebe mensagens do usuário e grava no DynamoDB
-- Lambda (Processor): processa mensagens e integra com o agente
-- Bedrock AgentCore: execução do agente e ferramentas de IA
+- DynamoDB: armazenamento das conexões WebSocket ativas
+- Lambda de mensagens: encaminha o histórico recente ao Amazon Bedrock e publica a resposta no WebSocket
+- Amazon Bedrock: geração das respostas do assistente
 - WAF e Route 53: proteção e acesso do sistema via domínio
 
 ### Fluxo de conexão e autenticação
@@ -40,8 +39,8 @@ A referência visual da arquitetura está no arquivo [arquitetura-chatbot.drawio
 2. O cliente abre uma conexão WebSocket para o API Gateway.
 3. O Lambda Authorizer valida o token antes de autorizar a conexão.
 4. O Lambda Connect registra a conexão ativa no DynamoDB.
-5. O cliente envia mensagens para o chat e o fluxo de persistência/processamento segue com os Lambdas e o agente de IA.
-6. Quando o usuário sai ou a conexão é encerrada, o Lambda Disconnect remove ou marca a sessão como finalizada.
+5. O cliente envia mensagens pela rota `sendMessage`; a Lambda invoca o Bedrock e publica a resposta na conexão WebSocket.
+6. Quando o cliente desconecta, o Lambda Disconnect remove a conexão do DynamoDB.
 
 ### API Gateway + WebSockets + Lambda
 
@@ -49,9 +48,9 @@ O chatbot já está disponível globalmente e os usuários conseguem se autentic
 
 Para manter uma comunicação bidirecional entre cliente e servidor, usamos o API Gateway com WebSockets. Esse serviço mantém a conexão aberta com o usuário, permitindo envio e recebimento de mensagens sem a necessidade de servidores permanentemente ativos.
 
-As funções Lambda processam cada evento da aplicação, validam o contexto da conversa e executam a lógica de negócio. Já o Amazon DynamoDB armazena conexões ativas, mensagens e o estado das conversas, garantindo consistência e escalabilidade.
+As funções Lambda processam os eventos de conexão e mensagem. A Lambda de mensagens envia o histórico recente ao Amazon Bedrock e devolve a resposta pelo WebSocket. O DynamoDB registra as conexões ativas; o histórico permanece em memória no navegador.
 
-Em resumo, o WebSocket mantém a conversa viva, o Lambda processa os eventos e o DynamoDB guarda o estado. Essa combinação permite que o chatbot atenda múltiplos usuários simultaneamente, em tempo real, com contexto e alta escalabilidade.
+Em resumo, o WebSocket mantém a conversa viva, a Lambda integra com o Bedrock e o DynamoDB mantém o registro das conexões ativas.
 
 ## Stack principal
 
@@ -60,7 +59,7 @@ Em resumo, o WebSocket mantém a conversa viva, o Lambda processa os eventos e o
 - Infraestrutura: Terraform
 - Deploy do frontend: S3 + CloudFront
 - Comunicação: WebSocket via API Gateway
-- Integração com IA: Amazon Bedrock AgentCore
+- Integração com IA: Amazon Bedrock Converse API
 
 ## Estrutura do repositório
 

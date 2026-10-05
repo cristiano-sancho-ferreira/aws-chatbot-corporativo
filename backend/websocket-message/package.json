@@ -1,0 +1,9 @@
+{
+  "name": "websocket-message",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@aws-sdk/client-apigatewaymanagementapi": "^3.850.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.850.0"
+  }
+}

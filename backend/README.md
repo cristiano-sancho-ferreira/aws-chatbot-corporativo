@@ -1,26 +1,18 @@
 # Backend WebSocket
 
-Esta pasta contém os exemplos de Lambda para o fluxo do API Gateway WebSocket.
+Esta pasta contém as funções Lambda usadas pelo API Gateway WebSocket.
 
-## Funções incluídas
+## Funções
 
-- websocket-authorizer: valida o token do Cognito antes de permitir a conexão
-- websocket-connect: registra a conexão ativa no DynamoDB
-- websocket-disconnect: remove a conexão do DynamoDB quando o cliente fecha o socket
+- `websocket-authorizer`: verifica a assinatura RS256 e os claims do ID token Cognito.
+- `websocket-connect`: registra a conexão ativa no DynamoDB.
+- `websocket-disconnect`: remove a conexão do DynamoDB ao fechar o socket.
+- `websocket-message`: envia a mensagem e o histórico recente ao Amazon Bedrock
+  Converse API e devolve a resposta pelo WebSocket.
 
-## Estrutura
+## Resposta do modelo
 
-```text
-backend/
-├── README.md
-├── websocket-authorizer/
-│   └── index.js
-├── websocket-connect/
-│   └── index.js
-└── websocket-disconnect/
-    └── index.js
-```
-
-## Observação
-
-Este exemplo foi implementado de forma simples para demonstrar a arquitetura. Em produção, o autorizer deve validar a assinatura do JWT do Cognito e verificar o issuer, audience e o pool correto antes de permitir a conexão.
+A Lambda `websocket-message` usa por padrão `amazon.nova-lite-v1:0`. Confirme
+que o modelo está disponível para a conta e região configuradas. O frontend
+envia as últimas 10 mensagens para contexto; esse histórico não é persistido
+após recarregar a página.

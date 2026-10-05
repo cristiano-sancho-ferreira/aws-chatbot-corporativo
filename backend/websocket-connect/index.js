@@ -1,7 +1,8 @@
-const AWS = require('aws-sdk');
+const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
+const { DynamoDBDocumentClient, PutCommand } = require('@aws-sdk/lib-dynamodb');
 
 const region = process.env.APP_REGION || process.env.AWS_REGION || 'us-east-1';
-const dynamodb = new AWS.DynamoDB.DocumentClient({ region });
+const dynamodb = DynamoDBDocumentClient.from(new DynamoDBClient({ region }));
 const tableName = process.env.WS_CONNECTIONS_TABLE || 'chatbot-websocket-connections';
 
 exports.handler = async (event) => {
@@ -16,12 +17,12 @@ exports.handler = async (event) => {
     ttl: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7,
   };
 
-  await dynamodb
-    .put({
+  await dynamodb.send(
+    new PutCommand({
       TableName: tableName,
       Item: item,
-    })
-    .promise();
+    }),
+  );
 
   return {
     statusCode: 200,

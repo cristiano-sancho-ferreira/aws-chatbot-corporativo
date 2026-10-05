@@ -18,10 +18,10 @@ export interface OutgoingWsMessage {
   action: 'sendMessage'
   conversationId: string
   content: string
+  history: Array<Pick<ChatMessage, 'role' | 'content'>>
 }
 
-// Formato de mensagem recebida do backend via WebSocket
-// (a Lambda "Persist" grava no DynamoDB e o "Processor" reenvia o stream do Bedrock AgentCore)
+// Formato de mensagem recebida do backend via WebSocket.
 export interface IncomingWsMessage {
   type: 'chunk' | 'done' | 'error' | 'conversationCreated'
   conversationId: string

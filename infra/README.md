@@ -17,7 +17,8 @@ terraform destroy -auto-approve -var-file="prd.tfvars"
 O `terraform apply` publica o frontend, mas não abre o navegador. Acesse a URL
 retornada pelo comando acima usando `https://` para visualizar a tela de login.
 O frontend usa automaticamente o endpoint WebSocket criado neste stack quando
-`ws_url` está vazio. Como esse endpoint ainda não processa mensagens, o chat
-fica em modo local: mostra as mensagens na tela, sem enviá-las ao backend nem
-gerar respostas. Para integrar o processamento, informe em `ws_url` a URL de
-um backend que tenha a rota `sendMessage`.
+`ws_url` está vazio. O Terraform também cria uma Lambda para a rota
+`sendMessage`, que invoca o Amazon Bedrock usando o modelo configurado em
+`bedrock_model_id` (padrão: `amazon.nova-lite-v1:0`). Antes de aplicar,
+confirme que esse modelo está disponível para sua conta e região. Cada chamada
+ao modelo pode gerar cobrança.

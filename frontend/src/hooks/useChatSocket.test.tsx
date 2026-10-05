@@ -11,20 +11,23 @@ const { config } = vi.hoisted(() => ({
 vi.mock('../config', () => ({ config }))
 
 describe('useChatSocket', () => {
-  it('exibe mensagens localmente sem abrir um WebSocket', () => {
-    class MockWebSocket {
-      static OPEN = 1
-      readyState = MockWebSocket.OPEN
-      close = vi.fn()
-      send = vi.fn()
-      onopen: (() => void) | null = null
-      onclose: (() => void) | null = null
-      onerror: (() => void) | null = null
-      onmessage: ((event: MessageEvent) => void) | null = null
+  class MockWebSocket {
+    static OPEN = 1
+    static latest: MockWebSocket | null = null
+    readyState = MockWebSocket.OPEN
+    close = vi.fn()
+    send = vi.fn()
+    onopen: (() => void) | null = null
+    onclose: (() => void) | null = null
+    onerror: (() => void) | null = null
+    onmessage: ((event: MessageEvent) => void) | null = null
 
-      constructor(public url: string) {}
+    constructor(public url: string) {
+      MockWebSocket.latest = this
     }
+  }
 
+  it('exibe mensagens localmente sem abrir um WebSocket', () => {
     vi.stubGlobal('WebSocket', MockWebSocket as any)
 
     const { result, rerender } = renderHook(
@@ -47,5 +50,61 @@ describe('useChatSocket', () => {
     rerender({ conversationId: 'conversation-2' })
 
     expect(result.current.messages).toHaveLength(0)
+  })
+
+  it('envia a mensagem e o histórico pelo WebSocket quando o backend está habilitado', () => {
+    config.chatMessagesEnabled = true
+    config.wsUrl = 'wss://example.com/prod'
+    vi.stubGlobal('WebSocket', MockWebSocket as any)
+
+    const { result } = renderHook(() =>
+      useChatSocket('token-de-teste', 'conversation-1')
+    )
+
+    act(() => {
+      result.current.sendMessage('Olá')
+    })
+
+    act(() => {
+      MockWebSocket.latest?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'chunk',
+            conversationId: 'conversation-1',
+            messageId: 'assistant-1',
+            content: 'Olá! ',
+          }),
+        })
+      )
+    })
+
+    act(() => {
+      MockWebSocket.latest?.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({
+            type: 'done',
+            conversationId: 'conversation-1',
+          }),
+        })
+      )
+    })
+
+    act(() => {
+      result.current.sendMessage('Continuando')
+    })
+
+    expect(MockWebSocket.latest?.send).toHaveBeenCalledTimes(2)
+    const outgoing = JSON.parse(
+      MockWebSocket.latest?.send.mock.calls[1][0] as string
+    )
+    expect(outgoing).toMatchObject({
+      action: 'sendMessage',
+      conversationId: 'conversation-1',
+      content: 'Continuando',
+      history: [
+        { role: 'user', content: 'Olá' },
+        { role: 'assistant', content: 'Olá! ' },
+      ],
+    })
   })
 })
