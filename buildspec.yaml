@@ -1,0 +1,116 @@
+version: 0.2
+
+phases:
+  install:
+    runtime-versions:
+      dotnet: 10.0
+    commands:
+      - export TF_MODULE="app-chatbot"  
+      - export TF_VERSION="1.15.9"
+      - export ENV="prd"
+      - export TF_COMMAND="apply"
+      - export TF_ORG="chatbot"
+      
+      - echo "=== Configuracao ==="
+      - echo "ENV=$ENV  |  TF_COMMAND=$TF_COMMAND  |  TF_VERSION=$TF_VERSION | TF_BUCKET=$TF_BUCKET"
+
+      - apt install unzip -y
+      - docker --version      
+      - dotnet --version
+
+      - |
+        if aws s3 ls s3://${TF_BUCKET}/artifactory/terraform_${TF_VERSION}_linux_amd64.zip ; then
+          echo "Terraform already exists in S3, downloading..."
+          aws s3 cp s3://${TF_BUCKET}/artifactory/terraform_${TF_VERSION}_linux_amd64.zip .
+        else
+          echo "Terraform not found in S3, downloading from the internet..."
+          wget https://releases.hashicorp.com/terraform/${TF_VERSION}/terraform_${TF_VERSION}_linux_amd64.zip
+          aws s3 cp terraform_${TF_VERSION}_linux_amd64.zip s3://${TF_BUCKET}/artifactory/terraform_${TF_VERSION}_linux_amd64.zip
+        fi
+      - "unzip terraform_${TF_VERSION}_linux_amd64.zip"
+      - "chmod +x terraform"
+      - "mv terraform /usr/local/bin/"
+      - "pwd"
+
+  pre_build:
+    commands:
+      - python parameters.py CockPit $ENV
+      - ls -la
+
+      # Extrai account_client do tfvars gerado — usado nos caminhos do S3
+      - export TF_ACCOUNT=$(grep 'account_client' $ENV.tfvars | tr -d ' "' | cut -d'=' -f2)
+      - export TF_REGION=$(grep '^region' $ENV.tfvars | tr -d ' "' | cut -d'=' -f2)
+      - echo "TF_ACCOUNT=$TF_ACCOUNT"
+      - echo "TF_REGION=$TF_REGION"
+
+      - aws s3 cp $ENV.tfvars s3://${TF_BUCKET}/clients/$TF_ACCOUNT/$ENV/$TF_MODULE/$ENV.tfvars
+
+      - cd $CODEBUILD_SRC_DIR/infra/$TF_MODULE
+      - echo "=== Terraform $TF_COMMAND  [ENV=$ENV] ==="
+
+      # Inicializa o Terraform
+      - terraform init -var-file="../../$ENV.tfvars" -backend-config="region=us-east-2" -backend-config="bucket=${TF_BUCKET}" -backend-config="key=clients/$TF_ACCOUNT/$ENV/$TF_MODULE/terraform.tfstate" -migrate-state
+      - terraform validate
+      - terraform version
+
+  build:
+    commands:
+
+      - echo "Running Terraform $TF_COMMAND"
+      - terraform $TF_COMMAND -auto-approve -var-file="../../$ENV.tfvars" -parallelism=3
+
+      - |
+        if [ "$TF_COMMAND" = "apply" ]; then
+          export ECR_REPOSITORY_URL=$(terraform output -raw ecr_repository_url)
+          export KEYCLOAK_VERSION=$(terraform output -raw keycloak_version)
+          export ECS_CLUSTER_NAME=$(terraform output -raw ecs_cluster_name)
+          export ECS_SERVICE_NAME=$(terraform output -raw ecs_service_name)
+          export CROSS_ACCOUNT_ROLE_ARN="arn:aws:iam::${TF_ACCOUNT}:role/${TF_ORG}-cross-account-role"
+          echo "Publicando imagem em ${ECR_REPOSITORY_URL}:${KEYCLOAK_VERSION}"
+
+          CREDENTIALS_FILE=$(mktemp)
+          aws sts assume-role \
+            --role-arn "$CROSS_ACCOUNT_ROLE_ARN" \
+            --role-session-name codebuild-ecr-push \
+            --query 'Credentials.[AccessKeyId,SecretAccessKey,SessionToken]' \
+            --output text > "$CREDENTIALS_FILE"
+          read AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN < "$CREDENTIALS_FILE"
+          rm -f "$CREDENTIALS_FILE"
+          export AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+
+          export ECR_REGISTRY=$(echo "$ECR_REPOSITORY_URL" | cut -d/ -f1)
+          aws ecr get-login-password --region "$TF_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
+          echo "Configurando emulacao para build ARM64"
+          docker run --privileged --rm tonistiigi/binfmt --install arm64
+          docker buildx build \
+            --platform linux/arm64 \
+            --build-arg KC_VERSION="$KEYCLOAK_VERSION" \
+            --tag "$ECR_REPOSITORY_URL:$KEYCLOAK_VERSION" \
+            --file "$CODEBUILD_SRC_DIR/infra/app-keycloak/Dockerfile" \
+            --push \
+            "$CODEBUILD_SRC_DIR/infra/app-keycloak"
+
+          echo "Validando arquitetura publicada no ECR"
+          export PUBLISHED_IMAGE="$ECR_REPOSITORY_URL:$KEYCLOAK_VERSION"
+          docker pull --platform linux/arm64 "$PUBLISHED_IMAGE"
+          export PUBLISHED_PLATFORM=$(docker image inspect "$PUBLISHED_IMAGE" --format '{{.Os}}/{{.Architecture}}')
+          echo "Arquitetura publicada: $PUBLISHED_PLATFORM"
+          [ "$PUBLISHED_PLATFORM" = "linux/arm64" ] || {
+            echo "ERRO: a imagem publicada nao contem o manifest linux/arm64"
+            exit 1
+          }
+
+          echo "Forcando novo deployment ECS para consumir o digest publicado"
+          aws ecs update-service \
+            --cluster "$ECS_CLUSTER_NAME" \
+            --service "$ECS_SERVICE_NAME" \
+            --region "$TF_REGION" \
+            --force-new-deployment \
+            >/dev/null
+        fi
+    
+  post_build:
+    commands:
+      - echo "Terraform $TF_COMMAND [ENV=$ENV] finalizado em $(date)"
+
+

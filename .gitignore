@@ -6,8 +6,8 @@ frontend/*.tsbuildinfo
 backend/**/node_modules/
 
 # Terraform
-infra/.terraform/
-infra/.terraform.lock.hcl
+app-chatbot/infra/.terraform
+app-chatbot/infra/.terraform.lock.hcl
 
 # OS / editor
 .DS_Store
@@ -16,6 +16,7 @@ Thumbs.db
 # Logs
 npm-debug.log*
 *.log
+*.zip
 
 # anotações pessoais
 anotações.txt
