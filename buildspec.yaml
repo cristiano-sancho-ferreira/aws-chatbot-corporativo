@@ -45,8 +45,9 @@ phases:
 
       - aws s3 cp $ENV.tfvars s3://${TF_BUCKET}/clients/$TF_ACCOUNT/$ENV/$TF_MODULE/$ENV.tfvars
 
-      - cd $CODEBUILD_SRC_DIR/infra/$TF_MODULE
+      - cd $CODEBUILD_SRC_DIR/$TF_MODULE/infra
       - echo "=== Terraform $TF_COMMAND  [ENV=$ENV] ==="
+      - pwd
 
       # Inicializa o Terraform
       - terraform init -var-file="../../$ENV.tfvars" -backend-config="region=us-east-2" -backend-config="bucket=${TF_BUCKET}" -backend-config="key=clients/$TF_ACCOUNT/$ENV/$TF_MODULE/terraform.tfstate" -migrate-state
