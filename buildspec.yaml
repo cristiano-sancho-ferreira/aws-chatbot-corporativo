@@ -45,6 +45,38 @@ phases:
 
       - aws s3 cp $ENV.tfvars s3://${TF_BUCKET}/clients/$TF_ACCOUNT/$ENV/$TF_MODULE/$ENV.tfvars
 
+      # ── Empacota as Lambdas ───────────────────────────────────────────────
+      # O Terraform espera os zips em: app-chatbot/infra/modules/backend/lambda/
+      - export LAMBDA_ZIP_DIR="$CODEBUILD_SRC_DIR/$TF_MODULE/infra/modules/backend/lambda"
+      - mkdir -p "$LAMBDA_ZIP_DIR"
+
+      # websocket-authorizer (sem dependências npm)
+      - echo "→ Empacotando websocket-authorizer..."
+      - cd "$CODEBUILD_SRC_DIR/$TF_MODULE/backend/websocket-authorizer"
+      - zip -r "$LAMBDA_ZIP_DIR/websocket-authorizer.zip" index.js
+
+      # websocket-connect
+      - echo "→ Instalando e empacotando websocket-connect..."
+      - cd "$CODEBUILD_SRC_DIR/$TF_MODULE/backend/websocket-connect"
+      - npm ci --omit=dev
+      - zip -r "$LAMBDA_ZIP_DIR/websocket-connect.zip" index.js node_modules package.json
+
+      # websocket-disconnect
+      - echo "→ Instalando e empacotando websocket-disconnect..."
+      - cd "$CODEBUILD_SRC_DIR/$TF_MODULE/backend/websocket-disconnect"
+      - npm ci --omit=dev
+      - zip -r "$LAMBDA_ZIP_DIR/websocket-disconnect.zip" index.js node_modules package.json
+
+      # websocket-message
+      - echo "→ Instalando e empacotando websocket-message..."
+      - cd "$CODEBUILD_SRC_DIR/$TF_MODULE/backend/websocket-message"
+      - npm ci --omit=dev
+      - zip -r "$LAMBDA_ZIP_DIR/websocket-message.zip" index.js node_modules package.json
+
+      - echo "✔ Lambdas empacotadas em $LAMBDA_ZIP_DIR"
+      - ls -lh "$LAMBDA_ZIP_DIR"
+      # ─────────────────────────────────────────────────────────────────────
+
       - cd $CODEBUILD_SRC_DIR/$TF_MODULE/infra
       - echo "=== Terraform $TF_COMMAND  [ENV=$ENV] ==="
       - pwd
