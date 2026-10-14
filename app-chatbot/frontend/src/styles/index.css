@@ -3,6 +3,7 @@
 
 #root {
   height: 100vh;
+  height: 100dvh; /* mobile: desconta barra de endereço do navegador */
 }
 
 button {

@@ -32,4 +32,6 @@ body {
   font-family: var(--font-body);
   color: var(--color-text);
   background: var(--color-paper);
+  /* impede bounce scroll no iOS que dá sensação de tela "grande" */
+  overscroll-behavior: none;
 }
