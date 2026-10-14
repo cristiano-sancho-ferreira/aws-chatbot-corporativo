@@ -3,7 +3,7 @@
 # ============================================================
 
 locals {
-  name_prefix = "${var.organization_name}-${var.application_name}-${var.environment}-${data.aws_caller_identity.current.id}"
+  name_prefix = "${var.organization_name}-${var.application_name}-${var.environment}"
   bucket_name = "${local.name_prefix}-frontend"
   common_tags = merge(
     var.common_tags,

@@ -205,3 +205,18 @@ Para detalhes específicos do frontend e da infraestrutura, consulte:
 ---
 
 Este repositório funciona como base para um chatbot corporativo em AWS, com frontend moderno e infraestrutura automatizada em Terraform.
+
+
+/chatbot/sancho/prd
+{
+  "organization_name": "sancho",
+  "application_name": "chatbot",
+  "account_client": "401932890892",
+  "environment": "prd",
+  "region": "us-east-1",
+  "vpc_cidr": "10.0.0.0/16",
+  "subnet_1_cidr": "10.0.0.0/20",
+  "subnet_2_cidr": "10.1.0.0/20",
+  "subnet_3_cidr": "10.2.0.0/20",
+  "subnet_4_cidr": "10.3.0.0/20"
+}

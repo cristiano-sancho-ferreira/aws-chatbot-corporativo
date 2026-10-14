@@ -64,6 +64,42 @@
   background: var(--color-paper);
 }
 
+.login-password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.login-password-wrapper input {
+  width: 100%;
+  padding-right: 40px; /* espaço para o botão */
+}
+
+.login-password-toggle {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  padding: 4px;
+  margin: 0;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-sm, 4px);
+  transition: color 0.15s ease;
+}
+
+.login-password-toggle:hover {
+  color: var(--color-sauce);
+  background: none;
+}
+
+.login-password-toggle:focus-visible {
+  outline: 2px solid var(--color-sauce);
+  outline-offset: 1px;
+}
+
 .login-form input:focus {
   outline: 2px solid var(--color-sauce);
   outline-offset: 1px;
