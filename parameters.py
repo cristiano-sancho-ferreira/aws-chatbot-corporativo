@@ -59,7 +59,7 @@ def main() -> None:
         print("Acessando parâmetros no SSM Parameter Store")
         #recupera o parametro no ssm (se existir)
         ssm = boto3.client('ssm')
-        parameter = ssm.get_parameter(Name=f'/{app}/cliente/{env.capitalize()}',WithDecryption=True)
+        parameter = ssm.get_parameter(Name=f'/{app}/sancho/{env}',WithDecryption=True)
         parameters=json.loads(parameter['Parameter']['Value'])
         for par in parameters:
             value = parameters[par]

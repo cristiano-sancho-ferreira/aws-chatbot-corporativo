@@ -34,7 +34,7 @@ phases:
 
   pre_build:
     commands:
-      - python parameters.py CockPit $ENV
+      - python parameters.py chatbot $ENV
       - ls -la
 
       # Extrai account_client do tfvars gerado — usado nos caminhos do S3
