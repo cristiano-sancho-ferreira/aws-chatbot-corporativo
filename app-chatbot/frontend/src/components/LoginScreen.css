@@ -123,7 +123,7 @@
   padding: 8px 10px;
 }
 
-.login-form button {
+.login-form button[type='submit'] {
   margin-top: 4px;
   border: none;
   border-radius: var(--radius-md);
@@ -135,11 +135,11 @@
   transition: background 0.15s ease;
 }
 
-.login-form button:hover:not(:disabled) {
+.login-form button[type='submit']:hover:not(:disabled) {
   background: var(--color-sauce-dark);
 }
 
-.login-form button:disabled {
+.login-form button[type='submit']:disabled {
   opacity: 0.6;
   cursor: default;
 }

@@ -83,6 +83,7 @@ resource "aws_lambda_function" "websocket_message" {
       BEDROCK_MODEL_ID   = var.bedrock_model_id
       WS_CALLBACK_URL    = "https://${aws_apigatewayv2_api.chat_websocket.id}.execute-api.${var.region}.amazonaws.com/prod"
       CHAT_HISTORY_TABLE = aws_dynamodb_table.chat_history.name
+      ORDERS_TABLE       = aws_dynamodb_table.orders.name
     }
   }
 

@@ -13,12 +13,19 @@ const { DynamoDBDocumentClient, PutCommand, QueryCommand } = require('@aws-sdk/l
 const region = process.env.APP_REGION || process.env.AWS_REGION || 'us-east-1';
 const modelId = process.env.BEDROCK_MODEL_ID;
 const historyTable = process.env.CHAT_HISTORY_TABLE;
+const ordersTable = process.env.ORDERS_TABLE;
 
 // Quantas mensagens anteriores carregamos do DynamoDB para contexto do Bedrock
 const HISTORY_LIMIT = 20;
 
+// Quantos pedidos recentes incluímos no contexto do Bedrock
+const ORDERS_LIMIT = 5;
+
 // TTL: 30 dias a partir de agora (segundos Unix)
 const TTL_SECONDS = 60 * 60 * 24 * 30;
+
+// Palavras-chave que indicam intenção de consultar pedidos
+const ORDER_INTENT_PATTERN = /\b(pedido|pedidos|compra|compras|pedi|último pedido|últimos pedidos|meu pedido|meus pedidos|status do pedido|minha compra|minhas compras|histórico)\b/i;
 
 const bedrock = new BedrockRuntimeClient({ region });
 const apiGateway = new ApiGatewayManagementApiClient({
@@ -38,7 +45,7 @@ async function loadHistory(conversationId) {
       TableName: historyTable,
       KeyConditionExpression: 'conversationId = :cid',
       ExpressionAttributeValues: { ':cid': conversationId },
-      ScanIndexForward: true,          // cronológico (SK timestamp ASC)
+      ScanIndexForward: true,
       Limit: HISTORY_LIMIT,
     }),
   );
@@ -65,6 +72,71 @@ async function saveMessage({ conversationId, messageId, role, content }) {
       },
     }),
   );
+}
+
+/**
+ * Carrega os últimos ORDERS_LIMIT pedidos do usuário, ordenados por data
+ * decrescente (ScanIndexForward = false no GSI order_by_date).
+ */
+async function loadRecentOrders(userId) {
+  if (!ordersTable || !userId) return [];
+
+  try {
+    const result = await dynamo.send(
+      new QueryCommand({
+        TableName: ordersTable,
+        IndexName: 'order_by_date',
+        KeyConditionExpression: 'userId = :uid',
+        ExpressionAttributeValues: { ':uid': userId },
+        ScanIndexForward: false, // mais recentes primeiro
+        Limit: ORDERS_LIMIT,
+      }),
+    );
+    return result.Items ?? [];
+  } catch (error) {
+    console.error('Falha ao carregar pedidos do usuário:', error);
+    return [];
+  }
+}
+
+/**
+ * Formata a lista de pedidos em texto legível para o Bedrock.
+ */
+function formatOrdersForContext(orders) {
+  if (!orders || orders.length === 0) {
+    return 'Nenhum pedido encontrado para este usuário.';
+  }
+
+  return orders
+    .map((order, index) => {
+      let itemsText = '';
+      try {
+        const items = typeof order.items === 'string'
+          ? JSON.parse(order.items)
+          : (order.items ?? []);
+        itemsText = Array.isArray(items)
+          ? items.map((i) => `  - ${i.name ?? i}${i.qty ? ` (x${i.qty})` : ''}${i.price ? ` — R$ ${(i.price / 100).toFixed(2)}` : ''}`).join('\n')
+          : String(items);
+      } catch {
+        itemsText = String(order.items ?? '');
+      }
+
+      const total = typeof order.total === 'number'
+        ? `R$ ${(order.total / 100).toFixed(2)}`
+        : (order.total ?? 'não informado');
+
+      const date = order.createdAt
+        ? new Date(order.createdAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
+        : 'data desconhecida';
+
+      return `Pedido ${index + 1}:
+  ID: ${order.orderId ?? 'N/A'}
+  Data: ${date}
+  Status: ${order.status ?? 'não informado'}
+  Itens:\n${itemsText}
+  Total: ${total}`;
+    })
+    .join('\n\n');
 }
 
 // ── WebSocket helper ──────────────────────────────────────────────────────────
@@ -117,6 +189,9 @@ exports.handler = async (event) => {
     throw new Error('API Gateway não informou o ID da conexão WebSocket.');
   }
 
+  // userId injetado pelo authorizer Lambda no contexto da requisição
+  const userId = event.requestContext?.authorizer?.userId ?? null;
+
   // 1. Valida o payload recebido
   let request;
   try {
@@ -139,38 +214,50 @@ exports.handler = async (event) => {
     await saveMessage({ conversationId, messageId: userMessageId, role: 'user', content });
   } catch (error) {
     console.error('Falha ao salvar mensagem do usuário:', error);
-    // Não aborta — segue em frente sem o registro desta mensagem
   }
 
-  // 3. Carrega o histórico completo (inclui a mensagem que acabou de ser salva)
+  // 3. Carrega o histórico completo
   let history = [];
   try {
     history = await loadHistory(conversationId);
   } catch (error) {
     console.error('Falha ao carregar histórico:', error);
-    // Fallback: usa só a mensagem atual
     history = [{ role: 'user', content: [{ text: content }] }];
   }
 
-  // Garante que a mensagem atual está no histórico (caso o save acima tenha falhado)
+  // Garante que a mensagem atual está no histórico
   if (history.length === 0 || history[history.length - 1].role !== 'user') {
     history.push({ role: 'user', content: [{ text: content }] });
   }
 
-  // 4. Invoca o Bedrock com o histórico completo
+  // 4. Detecta intenção de consulta de pedidos e injeta contexto
+  let ordersContext = '';
+  const hasOrderIntent = ORDER_INTENT_PATTERN.test(content);
+
+  if (hasOrderIntent && userId) {
+    const recentOrders = await loadRecentOrders(userId);
+    ordersContext = `\n\n--- PEDIDOS RECENTES DO USUÁRIO ---\n${formatOrdersForContext(recentOrders)}\n--- FIM DOS PEDIDOS ---`;
+    console.log(`Intenção de pedido detectada para userId=${userId}. ${recentOrders.length} pedido(s) carregado(s).`);
+  }
+
+  // 5. Monta o system prompt dinamicamente
+  const systemPrompt =
+    'Você é um assistente virtual de uma pizzaria. Responda em português, com clareza e cordialidade. ' +
+    'Não invente itens de cardápio, preços, promoções ou status de pedidos; quando não tiver esses dados, explique que não tem acesso a eles. ' +
+    (ordersContext
+      ? 'Os dados reais dos pedidos do usuário estão listados abaixo — use-os para responder com precisão.' + ordersContext
+      : 'Quando o usuário perguntar sobre pedidos e você não tiver os dados, oriente-o a aguardar um momento ou entrar em contato com a loja.');
+
+  // 6. Invoca o Bedrock com o histórico e o contexto de pedidos
   let answer;
   try {
     const response = await bedrock.send(
       new ConverseCommand({
         modelId,
-        system: [
-          {
-            text: 'Você é um assistente virtual de uma pizzaria. Responda em português, com clareza e cordialidade. Não invente itens de cardápio, preços, promoções ou status de pedidos; quando não tiver esses dados, explique que não tem acesso a eles.',
-          },
-        ],
+        system: [{ text: systemPrompt }],
         messages: history,
         inferenceConfig: {
-          maxTokens: 100,
+          maxTokens: 500,
           temperature: 0.2,
         },
       }),
@@ -195,7 +282,7 @@ exports.handler = async (event) => {
     return { statusCode: 200 };
   }
 
-  // 5. Persiste a resposta do assistente no DynamoDB
+  // 7. Persiste a resposta do assistente no DynamoDB
   const assistantMessageId = randomUUID();
   try {
     await saveMessage({ conversationId, messageId: assistantMessageId, role: 'assistant', content: answer });
@@ -203,7 +290,7 @@ exports.handler = async (event) => {
     console.error('Falha ao salvar resposta do assistente:', error);
   }
 
-  // 6. Envia a resposta ao cliente via WebSocket
+  // 8. Envia a resposta ao cliente via WebSocket
   await postToConnection(connectionId, {
     type: 'chunk',
     conversationId,
