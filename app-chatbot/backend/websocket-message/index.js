@@ -170,8 +170,8 @@ exports.handler = async (event) => {
         ],
         messages: history,
         inferenceConfig: {
-          maxTokens: 500,
-          temperature: 0.5,
+          maxTokens: 100,
+          temperature: 0.2,
         },
       }),
     );
