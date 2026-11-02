@@ -1,17 +1,39 @@
 import { useState } from 'react'
+import { useAuth } from '../auth/AuthContext'
 import { Sidebar } from './Sidebar'
 import { ChatWindow } from './ChatWindow'
 
-function newConversationId() {
-  return crypto.randomUUID()
+const CONVERSATION_KEY_PREFIX = 'chatbot:conversationId:'
+
+/** Retorna o conversationId persistido para o usuário ou cria um novo. */
+function getOrCreateConversationId(email: string): string {
+  const key = CONVERSATION_KEY_PREFIX + email
+  const existing = localStorage.getItem(key)
+  if (existing) return existing
+  const newId = crypto.randomUUID()
+  localStorage.setItem(key, newId)
+  return newId
+}
+
+/** Gera um novo conversationId e persiste, descartando o anterior. */
+function resetConversationId(email: string): string {
+  const key = CONVERSATION_KEY_PREFIX + email
+  const newId = crypto.randomUUID()
+  localStorage.setItem(key, newId)
+  return newId
 }
 
 export function ChatLayout() {
-  const [conversationId, setConversationId] = useState(newConversationId)
+  const { session } = useAuth()
+  const email = session?.email ?? 'anonymous'
+
+  const [conversationId, setConversationId] = useState(() =>
+    getOrCreateConversationId(email)
+  )
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   function handleNewConversation() {
-    setConversationId(newConversationId())
+    setConversationId(resetConversationId(email))
     setSidebarOpen(false)
   }
 

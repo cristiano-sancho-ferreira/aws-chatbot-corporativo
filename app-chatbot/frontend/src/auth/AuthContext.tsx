@@ -50,10 +50,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
+    // Remove o conversationId persistido antes de deslogar
+    if (session?.email) {
+      localStorage.removeItem(`chatbot:conversationId:${session.email}`)
+    }
     CognitoAuth.logout()
     setSession(null)
     setStatus('signedOut')
-  }, [])
+  }, [session])
 
   const signUp = useCallback(
     async (email: string, password: string, name: string) => {

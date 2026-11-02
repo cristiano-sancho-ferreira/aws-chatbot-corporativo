@@ -17,6 +17,7 @@ Thumbs.db
 npm-debug.log*
 *.log
 *.zip
+*.mp4
 
 # anotações pessoais
 anotações.txt

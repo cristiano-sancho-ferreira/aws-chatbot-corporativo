@@ -45,11 +45,12 @@ async function loadHistory(conversationId) {
       TableName: historyTable,
       KeyConditionExpression: 'conversationId = :cid',
       ExpressionAttributeValues: { ':cid': conversationId },
-      ScanIndexForward: true,
+      ScanIndexForward: false,  // mais recentes primeiro
       Limit: HISTORY_LIMIT,
     }),
   );
-  return (result.Items ?? []).map((item) => ({
+  // Reverte para ordem cronológica (antigas → recentes) antes de enviar ao Bedrock
+  return (result.Items ?? []).reverse().map((item) => ({
     role: item.role,
     content: [{ text: item.content }],
   }));

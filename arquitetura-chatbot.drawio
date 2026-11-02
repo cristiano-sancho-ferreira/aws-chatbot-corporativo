@@ -1,6 +1,6 @@
-<mxfile host="app.diagrams.net">
+<mxfile host="Electron">
   <diagram name="Página-1" id="Xy5q6XLG9W1GdwhJVa1h">
-    <mxGraphModel dx="2360" dy="1028" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
+    <mxGraphModel dx="1382" dy="590" grid="0" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="0" pageScale="1" pageWidth="827" pageHeight="1169" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
@@ -165,7 +165,7 @@
         <mxCell id="dLOyl4BsSZ9UWHLNKWPH-66" parent="dLOyl4BsSZ9UWHLNKWPH-65" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontStyle=1;shadow=1;fontColor=default;textShadow=1;" value="DynamoDB" vertex="1">
           <mxGeometry height="30" width="159" as="geometry" />
         </mxCell>
-        <mxCell id="dLOyl4BsSZ9UWHLNKWPH-67" parent="dLOyl4BsSZ9UWHLNKWPH-65" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;shadow=1;fontColor=default;textShadow=1;" value="(table)" vertex="1">
+        <mxCell id="dLOyl4BsSZ9UWHLNKWPH-67" parent="dLOyl4BsSZ9UWHLNKWPH-65" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;shadow=1;fontColor=default;textShadow=1;" value="(conversations-table)" vertex="1">
           <mxGeometry height="30" width="159" y="17" as="geometry" />
         </mxCell>
         <mxCell id="dLOyl4BsSZ9UWHLNKWPH-73" connectable="0" parent="1" style="group;shadow=1;fontColor=default;textShadow=1;" value="" vertex="1">
@@ -240,10 +240,10 @@
         <mxCell id="dLOyl4BsSZ9UWHLNKWPH-95" connectable="0" parent="1" style="group;shadow=1;fontColor=default;textShadow=1;" value="" vertex="1">
           <mxGeometry height="47" width="159" x="845" y="652" as="geometry" />
         </mxCell>
-        <mxCell id="dLOyl4BsSZ9UWHLNKWPH-96" parent="dLOyl4BsSZ9UWHLNKWPH-95" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontStyle=1;shadow=1;fontColor=default;textShadow=1;" value="Bedrock AgentCore" vertex="1">
+        <mxCell id="dLOyl4BsSZ9UWHLNKWPH-96" parent="dLOyl4BsSZ9UWHLNKWPH-95" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontStyle=1;shadow=1;fontColor=default;textShadow=1;" value="Bedrock / Agent" vertex="1">
           <mxGeometry height="30" width="159" as="geometry" />
         </mxCell>
-        <mxCell id="dLOyl4BsSZ9UWHLNKWPH-97" parent="dLOyl4BsSZ9UWHLNKWPH-95" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;shadow=1;fontColor=default;textShadow=1;" value="(Orchestrator)" vertex="1">
+        <mxCell id="dLOyl4BsSZ9UWHLNKWPH-97" parent="dLOyl4BsSZ9UWHLNKWPH-95" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;shadow=1;fontColor=default;textShadow=1;" value="(Orchestrator / Haiku)" vertex="1">
           <mxGeometry height="30" width="159" y="17" as="geometry" />
         </mxCell>
         <mxCell id="dLOyl4BsSZ9UWHLNKWPH-109" edge="1" parent="1" style="endArrow=classic;html=1;rounded=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;entryPerimeter=0;flowAnimation=1;dashed=1;dashPattern=8 8;strokeColor=light-dark(#000000,#121212);" target="dLOyl4BsSZ9UWHLNKWPH-104" value="">
@@ -264,7 +264,7 @@
         <mxCell id="dLOyl4BsSZ9UWHLNKWPH-112" edge="1" parent="1" source="dLOyl4BsSZ9UWHLNKWPH-91" style="edgeStyle=orthogonalEdgeStyle;rounded=0;orthogonalLoop=1;jettySize=auto;html=1;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.548;entryY=1.023;entryDx=0;entryDy=0;entryPerimeter=0;dashed=1;flowAnimation=1;dashPattern=8 8;strokeColor=light-dark(#000000,#121212);" target="dLOyl4BsSZ9UWHLNKWPH-46">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="dLOyl4BsSZ9UWHLNKWPH-113" connectable="0" parent="dLOyl4BsSZ9UWHLNKWPH-112" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="Streaming" vertex="1">
+        <mxCell id="dLOyl4BsSZ9UWHLNKWPH-113" connectable="0" parent="dLOyl4BsSZ9UWHLNKWPH-112" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];" value="streaming" vertex="1">
           <mxGeometry relative="1" x="-0.0288" as="geometry">
             <mxPoint as="offset" />
           </mxGeometry>
@@ -278,10 +278,10 @@
         <mxCell id="dLOyl4BsSZ9UWHLNKWPH-101" connectable="0" parent="dLOyl4BsSZ9UWHLNKWPH-114" style="group;shadow=1;fontColor=default;textShadow=1;" value="" vertex="1">
           <mxGeometry height="47" width="159" y="75" as="geometry" />
         </mxCell>
-        <mxCell id="dLOyl4BsSZ9UWHLNKWPH-102" parent="dLOyl4BsSZ9UWHLNKWPH-101" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontStyle=1;shadow=1;fontColor=default;textShadow=1;" value="Bedrock Tool" vertex="1">
+        <mxCell id="dLOyl4BsSZ9UWHLNKWPH-102" parent="dLOyl4BsSZ9UWHLNKWPH-101" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontStyle=1;shadow=1;fontColor=default;textShadow=1;" value="Bedrock / Tool" vertex="1">
           <mxGeometry height="30" width="159" as="geometry" />
         </mxCell>
-        <mxCell id="dLOyl4BsSZ9UWHLNKWPH-103" parent="dLOyl4BsSZ9UWHLNKWPH-101" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;shadow=1;fontColor=default;textShadow=1;" value="(Orchestrator)" vertex="1">
+        <mxCell id="dLOyl4BsSZ9UWHLNKWPH-103" parent="dLOyl4BsSZ9UWHLNKWPH-101" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;shadow=1;fontColor=default;textShadow=1;" value="(Lead / Sonnet)" vertex="1">
           <mxGeometry height="30" width="159" y="17" as="geometry" />
         </mxCell>
         <mxCell id="dLOyl4BsSZ9UWHLNKWPH-115" connectable="0" parent="1" style="group;fontColor=default;textShadow=1;shadow=1;" value="" vertex="1">
@@ -293,10 +293,10 @@
         <mxCell id="dLOyl4BsSZ9UWHLNKWPH-105" connectable="0" parent="dLOyl4BsSZ9UWHLNKWPH-115" style="group;shadow=1;fontColor=default;textShadow=1;" value="" vertex="1">
           <mxGeometry height="47" width="159" y="75" as="geometry" />
         </mxCell>
-        <mxCell id="dLOyl4BsSZ9UWHLNKWPH-106" parent="dLOyl4BsSZ9UWHLNKWPH-105" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontStyle=1;shadow=1;fontColor=default;textShadow=1;" value="Bedrock Tool" vertex="1">
+        <mxCell id="dLOyl4BsSZ9UWHLNKWPH-106" parent="dLOyl4BsSZ9UWHLNKWPH-105" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;fontStyle=1;shadow=1;fontColor=default;textShadow=1;" value="Bedrock / Tool" vertex="1">
           <mxGeometry height="30" width="159" as="geometry" />
         </mxCell>
-        <mxCell id="dLOyl4BsSZ9UWHLNKWPH-107" parent="dLOyl4BsSZ9UWHLNKWPH-105" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;shadow=1;fontColor=default;textShadow=1;" value="(Orchestrator)" vertex="1">
+        <mxCell id="dLOyl4BsSZ9UWHLNKWPH-107" parent="dLOyl4BsSZ9UWHLNKWPH-105" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;shadow=1;fontColor=default;textShadow=1;" value="(Inventory / Sonnet)" vertex="1">
           <mxGeometry height="30" width="159" y="17" as="geometry" />
         </mxCell>
         <mxCell id="tpDyFRhixN2zaZEFGTPr-1" connectable="0" parent="1" style="group;shadow=1;fontColor=default;textShadow=1;" value="" vertex="1">
@@ -340,6 +340,15 @@
             <mxPoint x="235.99823529411756" y="592" as="sourcePoint" />
             <mxPoint x="330.14529411764687" y="493" as="targetPoint" />
           </mxGeometry>
+        </mxCell>
+        <mxCell id="RhIx9hBK-B2ay0YqDqnH-1" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;System prompt&lt;/b&gt;, rules / guardrails / output,&amp;nbsp;" vertex="1">
+          <mxGeometry height="30" width="111" x="821" y="512" as="geometry" />
+        </mxCell>
+        <mxCell id="ekw3klQzxLQfnEvUk6l6-1" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;Summary strategy&lt;/b&gt;,&lt;div&gt;sliding window -&amp;gt; last 30 msg -&amp;gt; summary&lt;/div&gt;" vertex="1">
+          <mxGeometry height="30" width="124.5" x="639" y="518" as="geometry" />
+        </mxCell>
+        <mxCell id="ekw3klQzxLQfnEvUk6l6-2" parent="1" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" value="&lt;b&gt;storage first&lt;/b&gt;, salva msg =&amp;gt; processa" vertex="1">
+          <mxGeometry height="30" width="91" x="387" y="542" as="geometry" />
         </mxCell>
       </root>
     </mxGraphModel>
