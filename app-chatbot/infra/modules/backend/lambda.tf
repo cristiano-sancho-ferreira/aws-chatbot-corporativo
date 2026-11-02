@@ -84,6 +84,7 @@ resource "aws_lambda_function" "websocket_message" {
       WS_CALLBACK_URL    = "https://${aws_apigatewayv2_api.chat_websocket.id}.execute-api.${var.region}.amazonaws.com/prod"
       CHAT_HISTORY_TABLE = aws_dynamodb_table.chat_history.name
       ORDERS_TABLE       = aws_dynamodb_table.orders.name
+      SUMMARIES_TABLE    = aws_dynamodb_table.summaries.name
     }
   }
 
@@ -124,4 +125,20 @@ resource "aws_lambda_permission" "message_permission" {
   function_name = aws_lambda_function.websocket_message.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.chat_websocket.execution_arn}/*/sendMessage"
+}
+
+# ── Processor (acionada pelo DynamoDB Stream) ────────────────
+# A definição da função, IAM role e trigger estão em processor.tf.
+# Aqui apenas o CloudWatch Log Group explícito com retenção definida.
+
+resource "aws_cloudwatch_log_group" "processor_logs" {
+  name              = "/aws/lambda/${var.name_prefix}-processor"
+  retention_in_days = 14
+  tags              = var.common_tags
+}
+
+resource "aws_cloudwatch_log_group" "message_logs" {
+  name              = "/aws/lambda/${var.name_prefix}-websocket-message"
+  retention_in_days = 14
+  tags              = var.common_tags
 }

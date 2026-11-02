@@ -75,9 +75,21 @@ variable "ws_url" {
 }
 
 variable "bedrock_model_id" {
-  description = "ID do modelo Amazon Bedrock usado para responder às mensagens"
+  description = "ID do modelo Amazon Bedrock principal (responde às mensagens)"
   type        = string
   default     = "amazon.nova-lite-v1:0"
+}
+
+variable "bedrock_model_haiku" {
+  description = "Modelo leve do Bedrock para sumarização de histórico (Lambda Processor)"
+  type        = string
+  default     = "anthropic.claude-3-haiku-20240307-v1:0"
+}
+
+variable "bedrock_model_sonnet" {
+  description = "Modelo de alta capacidade do Bedrock (tool de inventário/lead)"
+  type        = string
+  default     = "anthropic.claude-3-5-sonnet-20241022-v2:0"
 }
 
 variable "assistant_name" {

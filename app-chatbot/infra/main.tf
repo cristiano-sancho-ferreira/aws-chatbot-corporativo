@@ -23,6 +23,11 @@ locals {
 module "frontend" {
   source = "./modules/frontend"
 
+  providers = {
+    aws           = aws
+    aws.us_east_1 = aws.us_east_1
+  }
+
   region                      = var.region
   environment                 = var.environment
   application_name            = var.application_name
@@ -48,6 +53,8 @@ module "backend" {
   name_prefix                  = local.name_prefix
   bucket_name                  = local.bucket_name
   bedrock_model_id             = var.bedrock_model_id
+  bedrock_model_haiku          = var.bedrock_model_haiku
+  bedrock_model_sonnet         = var.bedrock_model_sonnet
   manage_cognito_user_pool     = var.manage_cognito_user_pool
   existing_user_pool_id        = var.existing_user_pool_id
   existing_user_pool_client_id = var.existing_user_pool_client_id

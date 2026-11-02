@@ -1,31 +1,40 @@
+'use strict';
+
 const { randomUUID } = require('node:crypto');
 const {
   BedrockRuntimeClient,
-  ConverseCommand,
+  ConverseStreamCommand,
 } = require('@aws-sdk/client-bedrock-runtime');
 const {
   ApiGatewayManagementApiClient,
   PostToConnectionCommand,
 } = require('@aws-sdk/client-apigatewaymanagementapi');
 const { DynamoDBClient } = require('@aws-sdk/client-dynamodb');
-const { DynamoDBDocumentClient, PutCommand, QueryCommand } = require('@aws-sdk/lib-dynamodb');
+const {
+  DynamoDBDocumentClient,
+  PutCommand,
+  QueryCommand,
+  GetCommand,
+} = require('@aws-sdk/lib-dynamodb');
 
-const region = process.env.APP_REGION || process.env.AWS_REGION || 'us-east-1';
-const modelId = process.env.BEDROCK_MODEL_ID;
-const historyTable = process.env.CHAT_HISTORY_TABLE;
-const ordersTable = process.env.ORDERS_TABLE;
+const region         = process.env.APP_REGION || process.env.AWS_REGION || 'us-east-1';
+const modelId        = process.env.BEDROCK_MODEL_ID;
+const historyTable   = process.env.CHAT_HISTORY_TABLE;
+const ordersTable    = process.env.ORDERS_TABLE;
+const summariesTable = process.env.SUMMARIES_TABLE;
 
-// Quantas mensagens anteriores carregamos do DynamoDB para contexto do Bedrock
+// Sliding window: quantas mensagens recentes carregamos do DynamoDB
 const HISTORY_LIMIT = 20;
 
-// Quantos pedidos recentes incluímos no contexto do Bedrock
+// Quantos pedidos recentes incluímos no contexto
 const ORDERS_LIMIT = 5;
 
-// TTL: 30 dias a partir de agora (segundos Unix)
+// TTL: 30 dias
 const TTL_SECONDS = 60 * 60 * 24 * 30;
 
 // Palavras-chave que indicam intenção de consultar pedidos
-const ORDER_INTENT_PATTERN = /\b(pedido|pedidos|compra|compras|pedi|último pedido|últimos pedidos|meu pedido|meus pedidos|status do pedido|minha compra|minhas compras|histórico)\b/i;
+const ORDER_INTENT_PATTERN =
+  /\b(pedido|pedidos|compra|compras|pedi|último pedido|últimos pedidos|meu pedido|meus pedidos|status do pedido|minha compra|minhas compras|histórico)\b/i;
 
 const bedrock = new BedrockRuntimeClient({ region });
 const apiGateway = new ApiGatewayManagementApiClient({
@@ -36,8 +45,8 @@ const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({ region }));
 // ── DynamoDB helpers ──────────────────────────────────────────────────────────
 
 /**
- * Carrega as últimas HISTORY_LIMIT mensagens da conversa, ordenadas do mais
- * antigo para o mais recente (ScanIndexForward = true).
+ * Carrega as últimas HISTORY_LIMIT mensagens em ordem cronológica.
+ * ScanIndexForward=false (mais recentes primeiro) + reverse = sliding window correto.
  */
 async function loadHistory(conversationId) {
   const result = await dynamo.send(
@@ -45,11 +54,10 @@ async function loadHistory(conversationId) {
       TableName: historyTable,
       KeyConditionExpression: 'conversationId = :cid',
       ExpressionAttributeValues: { ':cid': conversationId },
-      ScanIndexForward: false,  // mais recentes primeiro
+      ScanIndexForward: false,
       Limit: HISTORY_LIMIT,
     }),
   );
-  // Reverte para ordem cronológica (antigas → recentes) antes de enviar ao Bedrock
   return (result.Items ?? []).reverse().map((item) => ({
     role: item.role,
     content: [{ text: item.content }],
@@ -57,8 +65,26 @@ async function loadHistory(conversationId) {
 }
 
 /**
- * Persiste uma mensagem individual na tabela de histórico.
+ * Lê o resumo gerado pela Lambda Processor, se existir.
+ * Retorna null quando a conversa ainda não foi sumarizada.
  */
+async function loadSummary(conversationId) {
+  if (!summariesTable) return null;
+  try {
+    const result = await dynamo.send(
+      new GetCommand({
+        TableName: summariesTable,
+        Key: { conversationId },
+      }),
+    );
+    return result.Item?.summary ?? null;
+  } catch (error) {
+    console.error('Falha ao carregar resumo:', error);
+    return null;
+  }
+}
+
+/** Persiste uma mensagem na tabela de histórico. */
 async function saveMessage({ conversationId, messageId, role, content }) {
   await dynamo.send(
     new PutCommand({
@@ -76,12 +102,10 @@ async function saveMessage({ conversationId, messageId, role, content }) {
 }
 
 /**
- * Carrega os últimos ORDERS_LIMIT pedidos do usuário, ordenados por data
- * decrescente (ScanIndexForward = false no GSI order_by_date).
+ * Carrega os últimos ORDERS_LIMIT pedidos do usuário via GSI order_by_date.
  */
 async function loadRecentOrders(userId) {
   if (!ordersTable || !userId) return [];
-
   try {
     const result = await dynamo.send(
       new QueryCommand({
@@ -89,53 +113,49 @@ async function loadRecentOrders(userId) {
         IndexName: 'order_by_date',
         KeyConditionExpression: 'userId = :uid',
         ExpressionAttributeValues: { ':uid': userId },
-        ScanIndexForward: false, // mais recentes primeiro
+        ScanIndexForward: false,
         Limit: ORDERS_LIMIT,
       }),
     );
     return result.Items ?? [];
   } catch (error) {
-    console.error('Falha ao carregar pedidos do usuário:', error);
+    console.error('Falha ao carregar pedidos:', error);
     return [];
   }
 }
 
-/**
- * Formata a lista de pedidos em texto legível para o Bedrock.
- */
+/** Formata pedidos em texto legível para o system prompt. */
 function formatOrdersForContext(orders) {
   if (!orders || orders.length === 0) {
     return 'Nenhum pedido encontrado para este usuário.';
   }
-
   return orders
     .map((order, index) => {
       let itemsText = '';
       try {
-        const items = typeof order.items === 'string'
-          ? JSON.parse(order.items)
-          : (order.items ?? []);
+        const items =
+          typeof order.items === 'string' ? JSON.parse(order.items) : (order.items ?? []);
         itemsText = Array.isArray(items)
-          ? items.map((i) => `  - ${i.name ?? i}${i.qty ? ` (x${i.qty})` : ''}${i.price ? ` — R$ ${(i.price / 100).toFixed(2)}` : ''}`).join('\n')
+          ? items
+              .map(
+                (i) =>
+                  `  - ${i.name ?? i}${i.qty ? ` (x${i.qty})` : ''}${
+                    i.price ? ` — R$ ${(i.price / 100).toFixed(2)}` : ''
+                  }`,
+              )
+              .join('\n')
           : String(items);
       } catch {
         itemsText = String(order.items ?? '');
       }
-
-      const total = typeof order.total === 'number'
-        ? `R$ ${(order.total / 100).toFixed(2)}`
-        : (order.total ?? 'não informado');
-
+      const total =
+        typeof order.total === 'number'
+          ? `R$ ${(order.total / 100).toFixed(2)}`
+          : (order.total ?? 'não informado');
       const date = order.createdAt
         ? new Date(order.createdAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
         : 'data desconhecida';
-
-      return `Pedido ${index + 1}:
-  ID: ${order.orderId ?? 'N/A'}
-  Data: ${date}
-  Status: ${order.status ?? 'não informado'}
-  Itens:\n${itemsText}
-  Total: ${total}`;
+      return `Pedido ${index + 1}:\n  ID: ${order.orderId ?? 'N/A'}\n  Data: ${date}\n  Status: ${order.status ?? 'não informado'}\n  Itens:\n${itemsText}\n  Total: ${total}`;
     })
     .join('\n\n');
 }
@@ -164,21 +184,13 @@ function readBody(event) {
 
 function parseRequest(event) {
   const body = readBody(event);
-
-  if (!body || typeof body !== 'object') {
-    throw new Error('Corpo da mensagem inválido.');
-  }
-
+  if (!body || typeof body !== 'object') throw new Error('Corpo da mensagem inválido.');
   const conversationId = body?.conversationId;
   const content = typeof body?.content === 'string' ? body.content.trim() : '';
-
-  if (typeof conversationId !== 'string' || !conversationId) {
+  if (typeof conversationId !== 'string' || !conversationId)
     throw new Error('conversationId é obrigatório.');
-  }
-  if (!content || content.length > 4000) {
+  if (!content || content.length > 4000)
     throw new Error('A mensagem deve conter entre 1 e 4000 caracteres.');
-  }
-
   return { conversationId, content };
 }
 
@@ -186,14 +198,11 @@ function parseRequest(event) {
 
 exports.handler = async (event) => {
   const connectionId = event.requestContext?.connectionId;
-  if (!connectionId) {
-    throw new Error('API Gateway não informou o ID da conexão WebSocket.');
-  }
+  if (!connectionId) throw new Error('API Gateway não informou o ID da conexão WebSocket.');
 
-  // userId injetado pelo authorizer Lambda no contexto da requisição
   const userId = event.requestContext?.authorizer?.userId ?? null;
 
-  // 1. Valida o payload recebido
+  // 1. Valida payload
   let request;
   try {
     request = parseRequest(event);
@@ -210,53 +219,60 @@ exports.handler = async (event) => {
   const { conversationId, content } = request;
   const userMessageId = randomUUID();
 
-  // 2. Persiste a mensagem do usuário no DynamoDB
-  try {
-    await saveMessage({ conversationId, messageId: userMessageId, role: 'user', content });
-  } catch (error) {
-    console.error('Falha ao salvar mensagem do usuário:', error);
-  }
-
-  // 3. Carrega o histórico completo
-  let history = [];
-  try {
-    history = await loadHistory(conversationId);
-  } catch (error) {
-    console.error('Falha ao carregar histórico:', error);
-    history = [{ role: 'user', content: [{ text: content }] }];
-  }
+  // 2. Persiste mensagem do usuário + carrega histórico e resumo em paralelo
+  const [, history, summary] = await Promise.all([
+    saveMessage({ conversationId, messageId: userMessageId, role: 'user', content }).catch(
+      (e) => console.error('Falha ao salvar msg do usuário:', e),
+    ),
+    loadHistory(conversationId).catch((e) => {
+      console.error('Falha ao carregar histórico:', e);
+      return [{ role: 'user', content: [{ text: content }] }];
+    }),
+    loadSummary(conversationId),
+  ]);
 
   // Garante que a mensagem atual está no histórico
-  if (history.length === 0 || history[history.length - 1].role !== 'user') {
-    history.push({ role: 'user', content: [{ text: content }] });
+  const workingHistory = history.length > 0 ? history : [];
+  if (
+    workingHistory.length === 0 ||
+    workingHistory[workingHistory.length - 1].role !== 'user'
+  ) {
+    workingHistory.push({ role: 'user', content: [{ text: content }] });
   }
 
-  // 4. Detecta intenção de consulta de pedidos e injeta contexto
+  // 3. Detecta intenção de pedidos e carrega dados se necessário
   let ordersContext = '';
-  const hasOrderIntent = ORDER_INTENT_PATTERN.test(content);
-
-  if (hasOrderIntent && userId) {
-    const recentOrders = await loadRecentOrders(userId);
-    ordersContext = `\n\n--- PEDIDOS RECENTES DO USUÁRIO ---\n${formatOrdersForContext(recentOrders)}\n--- FIM DOS PEDIDOS ---`;
-    console.log(`Intenção de pedido detectada para userId=${userId}. ${recentOrders.length} pedido(s) carregado(s).`);
+  if (ORDER_INTENT_PATTERN.test(content) && userId) {
+    const orders = await loadRecentOrders(userId);
+    ordersContext =
+      `\n\n--- PEDIDOS RECENTES DO USUÁRIO ---\n${formatOrdersForContext(orders)}\n--- FIM DOS PEDIDOS ---`;
+    console.log(`Intenção de pedido: userId=${userId}, ${orders.length} pedido(s).`);
   }
 
-  // 5. Monta o system prompt dinamicamente
+  // 4. Monta system prompt com resumo (se existir) + contexto de pedidos
+  const summaryBlock = summary
+    ? `\n\nRESUMO DA CONVERSA ATÉ AGORA:\n${summary}\n(Use este resumo como contexto para as mensagens recentes abaixo.)`
+    : '';
+
   const systemPrompt =
     'Você é um assistente virtual de uma pizzaria. Responda em português, com clareza e cordialidade. ' +
-    'Não invente itens de cardápio, preços, promoções ou status de pedidos; quando não tiver esses dados, explique que não tem acesso a eles. ' +
+    'Não invente itens de cardápio, preços, promoções ou status de pedidos; quando não tiver esses dados, explique que não tem acesso a eles.' +
+    summaryBlock +
     (ordersContext
-      ? 'Os dados reais dos pedidos do usuário estão listados abaixo — use-os para responder com precisão.' + ordersContext
-      : 'Quando o usuário perguntar sobre pedidos e você não tiver os dados, oriente-o a aguardar um momento ou entrar em contato com a loja.');
+      ? '\n\nOs dados reais dos pedidos do usuário estão listados abaixo — use-os para responder com precisão.' +
+        ordersContext
+      : '');
 
-  // 6. Invoca o Bedrock com o histórico e o contexto de pedidos
-  let answer;
+  // 5. Invoca Bedrock com streaming (ConverseStreamCommand)
+  const assistantMessageId = randomUUID();
+  let fullAnswer = '';
+
   try {
-    const response = await bedrock.send(
-      new ConverseCommand({
+    const streamResponse = await bedrock.send(
+      new ConverseStreamCommand({
         modelId,
         system: [{ text: systemPrompt }],
-        messages: history,
+        messages: workingHistory,
         inferenceConfig: {
           maxTokens: 500,
           temperature: 0.2,
@@ -264,17 +280,28 @@ exports.handler = async (event) => {
       }),
     );
 
-    answer = response.output?.message?.content
-      ?.filter((block) => typeof block.text === 'string')
-      .map((block) => block.text)
-      .join('')
-      .trim();
+    // Itera o stream e envia cada chunk imediatamente ao cliente via WebSocket
+    for await (const chunk of streamResponse.stream) {
+      const text = chunk.contentBlockDelta?.delta?.text;
+      if (text) {
+        fullAnswer += text;
+        await postToConnection(connectionId, {
+          type: 'chunk',
+          conversationId,
+          messageId: assistantMessageId,
+          content: text,
+        });
+      }
 
-    if (!answer) {
-      throw new Error('Bedrock retornou uma resposta vazia.');
+      // Detecta fim do stream pelo evento stopReason
+      if (chunk.messageStop) {
+        break;
+      }
     }
+
+    if (!fullAnswer) throw new Error('Bedrock retornou resposta vazia.');
   } catch (error) {
-    console.error('Falha ao invocar o modelo do Bedrock:', error);
+    console.error('Falha no streaming do Bedrock:', error);
     await postToConnection(connectionId, {
       type: 'error',
       conversationId,
@@ -283,25 +310,16 @@ exports.handler = async (event) => {
     return { statusCode: 200 };
   }
 
-  // 7. Persiste a resposta do assistente no DynamoDB
-  const assistantMessageId = randomUUID();
-  try {
-    await saveMessage({ conversationId, messageId: assistantMessageId, role: 'assistant', content: answer });
-  } catch (error) {
-    console.error('Falha ao salvar resposta do assistente:', error);
-  }
-
-  // 8. Envia a resposta ao cliente via WebSocket
-  await postToConnection(connectionId, {
-    type: 'chunk',
-    conversationId,
-    messageId: assistantMessageId,
-    content: answer,
-  });
-  await postToConnection(connectionId, {
-    type: 'done',
-    conversationId,
-  });
+  // 6. Persiste resposta completa do assistente + sinaliza done em paralelo
+  await Promise.all([
+    saveMessage({
+      conversationId,
+      messageId: assistantMessageId,
+      role: 'assistant',
+      content: fullAnswer,
+    }).catch((e) => console.error('Falha ao salvar resposta do assistente:', e)),
+    postToConnection(connectionId, { type: 'done', conversationId }),
+  ]);
 
   return { statusCode: 200 };
 };

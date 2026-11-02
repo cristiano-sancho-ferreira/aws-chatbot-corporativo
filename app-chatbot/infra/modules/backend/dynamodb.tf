@@ -114,5 +114,45 @@ resource "aws_dynamodb_table" "chat_history" {
     enabled        = true
   }
 
+  # ── DynamoDB Streams ──────────────────────────────────────
+  # NEW_AND_OLD_IMAGES: a Lambda Processor recebe o item novo e o anterior,
+  # permitindo detectar quando uma mensagem do assistente foi inserida
+  # e acionar a sumarização do histórico (sliding window).
+  stream_enabled   = true
+  stream_view_type = "NEW_AND_OLD_IMAGES"
+
+  tags = var.common_tags
+}
+
+# ============================================================
+# Tabela de resumos de conversa
+#
+# A Lambda Processor grava aqui o resumo gerado pelo Bedrock Haiku
+# quando o histórico de uma conversa ultrapassa SUMMARY_THRESHOLD msgs.
+#
+# Modelo de acesso:
+#   - PK: conversationId  →  um item por conversa
+#   - summary             →  texto do resumo gerado pelo Bedrock
+#   - summarizedUpTo      →  timestamp da última mensagem incluída no resumo
+#   - messageCount        →  total de mensagens sumarizadas
+#   - updatedAt           →  ISO-8601 da última atualização
+#   - ttl                 →  expira junto com o chat-history (30 dias)
+# ============================================================
+
+resource "aws_dynamodb_table" "summaries" {
+  name         = "${var.name_prefix}-summaries"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "conversationId"
+
+  attribute {
+    name = "conversationId"
+    type = "S"
+  }
+
+  ttl {
+    attribute_name = "ttl"
+    enabled        = true
+  }
+
   tags = var.common_tags
 }

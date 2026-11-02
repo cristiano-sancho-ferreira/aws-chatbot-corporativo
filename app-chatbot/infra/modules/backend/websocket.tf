@@ -91,6 +91,11 @@ resource "aws_iam_role_policy" "websocket_message_policy" {
           aws_dynamodb_table.orders.arn,
           "${aws_dynamodb_table.orders.arn}/index/order_by_date"
         ]
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["dynamodb:GetItem"]
+        Resource = aws_dynamodb_table.summaries.arn
       }
     ]
   })
@@ -112,7 +117,7 @@ resource "aws_apigatewayv2_api" "chat_websocket" {
 resource "aws_apigatewayv2_authorizer" "chat_websocket_authorizer" {
   api_id           = aws_apigatewayv2_api.chat_websocket.id
   authorizer_type  = "REQUEST"
-  authorizer_uri   = "arn:${data.aws_partition.current.partition}:apigateway:${var.region}:lambda:path/2015-03-31/functions/arn:${data.aws_partition.current.partition}:lambda:${var.region}:${data.aws_caller_identity.current.account_id}:function:${var.name_prefix}-websocket-authorizer/invocations"
+  authorizer_uri   = aws_lambda_function.websocket_authorizer.invoke_arn
   identity_sources = ["route.request.querystring.token"]
   name             = "${var.name_prefix}-websocket-authorizer"
 }
@@ -120,21 +125,21 @@ resource "aws_apigatewayv2_authorizer" "chat_websocket_authorizer" {
 resource "aws_apigatewayv2_integration" "connect_integration" {
   api_id             = aws_apigatewayv2_api.chat_websocket.id
   integration_type   = "AWS_PROXY"
-  integration_uri      = "arn:aws:lambda:us-east-1:401932890892:function:${var.name_prefix}-websocket-connect"
+  integration_uri    = aws_lambda_function.websocket_connect.invoke_arn
   integration_method = "POST"
 }
 
 resource "aws_apigatewayv2_integration" "disconnect_integration" {
   api_id             = aws_apigatewayv2_api.chat_websocket.id
   integration_type   = "AWS_PROXY"
-  integration_uri      = "arn:aws:lambda:us-east-1:401932890892:function:${var.name_prefix}-websocket-disconnect" 
+  integration_uri    = aws_lambda_function.websocket_disconnect.invoke_arn
   integration_method = "POST"
 }
 
 resource "aws_apigatewayv2_integration" "message_integration" {
   api_id               = aws_apigatewayv2_api.chat_websocket.id
   integration_type     = "AWS_PROXY"
-  integration_uri      = "arn:aws:lambda:us-east-1:401932890892:function:${var.name_prefix}-websocket-message"
+  integration_uri      = aws_lambda_function.websocket_message.invoke_arn
   integration_method   = "POST"
   timeout_milliseconds = 29000
 }

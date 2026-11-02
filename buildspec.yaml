@@ -73,6 +73,12 @@ phases:
       - npm ci --omit=dev
       - zip -r "$LAMBDA_ZIP_DIR/websocket-message.zip" index.js node_modules package.json
 
+      # processor (Lambda Processor — DynamoDB Stream → sumarização com Bedrock Haiku)
+      - echo "→ Instalando e empacotando processor..."
+      - cd "$CODEBUILD_SRC_DIR/$TF_MODULE/backend/processor"
+      - npm ci --omit=dev
+      - zip -r "$LAMBDA_ZIP_DIR/processor.zip" index.js node_modules package.json
+
       - echo "✔ Lambdas empacotadas em $LAMBDA_ZIP_DIR"
       - ls -lh "$LAMBDA_ZIP_DIR"
       # ─────────────────────────────────────────────────────────────────────

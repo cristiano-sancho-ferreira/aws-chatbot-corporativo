@@ -14,6 +14,16 @@ variable "name_prefix" {}
 
 variable "bedrock_model_id" {}
 
+# Modelo leve (Haiku) usado pela Lambda Processor para sumarização de histórico
+variable "bedrock_model_haiku" {
+  default = "anthropic.claude-3-haiku-20240307-v1:0"
+}
+
+# Modelo de alta capacidade (Sonnet) disponível como tool para o agente
+variable "bedrock_model_sonnet" {
+  default = "anthropic.claude-3-5-sonnet-20241022-v2:0"
+}
+
 variable "manage_cognito_user_pool" {}
 
 variable "existing_user_pool_id" {}
