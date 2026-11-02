@@ -10,6 +10,10 @@ resource "aws_cloudfront_distribution" "chatbot_corp" {
   comment             = "${var.name_prefix} - frontend do chatbot"
   tags                = var.common_tags
 
+  # WAF associado diretamente aqui — é a única forma suportada para CloudFront.
+  # aws_wafv2_web_acl_association não funciona com distribuições CloudFront.
+  web_acl_id = aws_wafv2_web_acl.chatbot.arn
+
   origin {
     domain_name              = aws_s3_bucket.chatbot_corp.bucket_regional_domain_name
     origin_id                = "s3-frontend"

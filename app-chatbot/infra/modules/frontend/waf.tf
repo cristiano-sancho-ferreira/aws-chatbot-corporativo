@@ -124,9 +124,6 @@ resource "aws_wafv2_web_acl" "chatbot" {
   }
 }
 
-# ── Associa o WAF à distribuição CloudFront ───────────────
-resource "aws_wafv2_web_acl_association" "chatbot_cloudfront" {
-  provider     = aws.us_east_1
-  resource_arn = aws_cloudfront_distribution.chatbot_corp.arn
-  web_acl_arn  = aws_wafv2_web_acl.chatbot.arn
-}
+# Nota: a associação ao CloudFront é feita via web_acl_id no resource
+# aws_cloudfront_distribution (cloudfront.tf), não via aws_wafv2_web_acl_association.
+# Esse recurso de associação não é suportado para distribuições CloudFront.

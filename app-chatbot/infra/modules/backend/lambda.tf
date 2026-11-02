@@ -137,8 +137,6 @@ resource "aws_cloudwatch_log_group" "processor_logs" {
   tags              = var.common_tags
 }
 
-resource "aws_cloudwatch_log_group" "message_logs" {
-  name              = "/aws/lambda/${var.name_prefix}-websocket-message"
-  retention_in_days = 14
-  tags              = var.common_tags
-}
+# Nota: o log group da websocket-message já existe (criado automaticamente
+# pela Lambda). Gerenciá-lo via Terraform causaria ResourceAlreadyExistsException.
+# Para importá-lo: terraform import module.backend.aws_cloudwatch_log_group.message_logs /aws/lambda/<name>
