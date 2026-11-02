@@ -86,7 +86,7 @@ resource "aws_iam_role_policy" "websocket_message_policy" {
       },
       {
         Effect   = "Allow"
-        Action   = ["dynamodb:Query", "dynamodb:PutItem"]
+        Action   = ["dynamodb:Query", "dynamodb:PutItem", "dynamodb:UpdateItem"]
         Resource = [
           aws_dynamodb_table.orders.arn,
           "${aws_dynamodb_table.orders.arn}/index/order_by_date"

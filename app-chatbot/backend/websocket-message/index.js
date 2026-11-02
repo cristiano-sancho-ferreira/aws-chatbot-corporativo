@@ -16,6 +16,7 @@ const {
   PutCommand,
   QueryCommand,
   GetCommand,
+  UpdateCommand,
 } = require('@aws-sdk/lib-dynamodb');
 
 const region         = process.env.APP_REGION || process.env.AWS_REGION || 'us-east-1';
@@ -67,6 +68,32 @@ const TOOLS = [
             observacao_geral: {
               type: 'string',
               description: 'Observação geral do pedido (ex: endereço de entrega, forma de pagamento)',
+            },
+          },
+        },
+      },
+    },
+  },
+  {
+    toolSpec: {
+      name: 'cancelar_pedido',
+      description:
+        'Cancela um pedido existente do cliente alterando seu status para "cancelado". ' +
+        'Use SOMENTE quando o cliente pedir explicitamente para cancelar um pedido específico e confirmar a ação. ' +
+        'Só é possível cancelar pedidos com status "pendente" ou "confirmado". ' +
+        'Pedidos já "entregue" ou "cancelado" não podem ser alterados.',
+      inputSchema: {
+        json: {
+          type: 'object',
+          required: ['order_id'],
+          properties: {
+            order_id: {
+              type: 'string',
+              description: 'ID do pedido a ser cancelado (orderId)',
+            },
+            motivo: {
+              type: 'string',
+              description: 'Motivo do cancelamento informado pelo cliente (opcional)',
             },
           },
         },
@@ -203,6 +230,46 @@ async function saveOrder({ userId, itens, observacaoGeral }) {
   }
 }
 
+/**
+ * Cancela um pedido alterando seu status para "cancelado" (soft delete).
+ * Só permite cancelar pedidos com status "pendente" ou "confirmado".
+ */
+async function cancelOrder({ userId, orderId, motivo }) {
+  if (!ordersTable || !userId || !orderId) {
+    return { sucesso: false, erro: 'Dados insuficientes para cancelar o pedido.' };
+  }
+
+  try {
+    await dynamo.send(
+      new UpdateCommand({
+        TableName: ordersTable,
+        Key: { userId, orderId },
+        // Só cancela se o status atual for "pendente" ou "confirmado"
+        ConditionExpression: '#s IN (:pendente, :confirmado)',
+        UpdateExpression: 'SET #s = :cancelado, canceladoEm = :now, motivoCancelamento = :motivo',
+        ExpressionAttributeNames: { '#s': 'status' },
+        ExpressionAttributeValues: {
+          ':cancelado':  'cancelado',
+          ':pendente':   'pendente',
+          ':confirmado': 'confirmado',
+          ':now':        new Date().toISOString(),
+          ':motivo':     motivo ?? '',
+        },
+      }),
+    );
+    return { sucesso: true, orderId, status: 'cancelado' };
+  } catch (e) {
+    if (e.name === 'ConditionalCheckFailedException') {
+      return {
+        sucesso: false,
+        erro: 'Este pedido não pode ser cancelado pois já foi entregue ou já está cancelado.',
+      };
+    }
+    console.error('Falha ao cancelar pedido:', e);
+    return { sucesso: false, erro: 'Não foi possível cancelar o pedido. Tente novamente.' };
+  }
+}
+
 function formatOrdersForContext(orders) {
   if (!orders || orders.length === 0) return 'Nenhum pedido encontrado para este usuário.';
   return orders
@@ -271,6 +338,12 @@ async function executeTool(toolUseBlock, userId) {
       userId,
       itens:            input.itens ?? [],
       observacaoGeral:  input.observacao_geral ?? '',
+    });
+  } else if (name === 'cancelar_pedido') {
+    result = await cancelOrder({
+      userId,
+      orderId: input.order_id,
+      motivo:  input.motivo ?? '',
     });
   } else {
     result = { erro: `Tool desconhecida: ${name}` };
