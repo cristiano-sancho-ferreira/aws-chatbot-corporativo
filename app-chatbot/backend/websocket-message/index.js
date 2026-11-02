@@ -29,7 +29,7 @@ const ORDERS_LIMIT   = 5;
 const TTL_SECONDS    = 60 * 60 * 24 * 30; // 30 dias
 
 const ORDER_QUERY_PATTERN =
-  /\b(pedido|pedidos|compra|compras|pedi|último pedido|últimos pedidos|meu pedido|meus pedidos|status do pedido|minha compra|minhas compras|histórico)\b/i;
+  /\b(pedido|pedidos|compra|compras|pedi|último|últimos|meu pedido|meus pedidos|status|minha compra|minhas compras|histórico|aberto|abertos|entrega|entregue|andamento)\b/i;
 
 const bedrock    = new BedrockRuntimeClient({ region });
 const apiGateway = new ApiGatewayManagementApiClient({ endpoint: process.env.WS_CALLBACK_URL });
@@ -308,10 +308,10 @@ async function runToolLoop(messages, systemPrompt, userId) {
   const stopReason = response.stopReason;
   const assistantMessage = response.output?.message;
 
-  // Sem tool use — retorna direto o texto
+  // Sem tool use — retorna direto o texto, filtrando blocos thinking/reasoning
   if (stopReason !== 'tool_use') {
     const text = assistantMessage?.content
-      ?.filter((b) => b.text)
+      ?.filter((b) => b.text && !b.reasoningContent)
       .map((b) => b.text)
       .join('') ?? '';
     return { usedTool: false, finalText: text, updatedMessages: messages };
@@ -457,7 +457,7 @@ exports.handler = async (event) => {
       );
 
       fullAnswer = finalResponse.output?.message?.content
-        ?.filter((b) => b.text)
+        ?.filter((b) => b.text && !b.reasoningContent)
         .map((b) => b.text)
         .join('') ?? '';
 
