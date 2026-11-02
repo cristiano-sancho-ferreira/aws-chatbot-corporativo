@@ -280,10 +280,12 @@ exports.handler = async (event) => {
       }),
     );
 
-    // Itera o stream e envia cada chunk imediatamente ao cliente via WebSocket
-    for await (const chunk of streamResponse.stream) {
-      const text = chunk.contentBlockDelta?.delta?.text;
-      if (text) {
+    // Itera os eventos do stream — o SDK entrega objetos com uma única chave
+    // representando o tipo do evento (contentBlockDelta, messageStop, etc.)
+    for await (const event of streamResponse.stream) {
+      // Texto incremental do modelo
+      if (event.contentBlockDelta?.delta?.text) {
+        const text = event.contentBlockDelta.delta.text;
         fullAnswer += text;
         await postToConnection(connectionId, {
           type: 'chunk',
@@ -292,11 +294,8 @@ exports.handler = async (event) => {
           content: text,
         });
       }
-
-      // Detecta fim do stream pelo evento stopReason
-      if (chunk.messageStop) {
-        break;
-      }
+      // Fim do stream
+      if (event.messageStop) break;
     }
 
     if (!fullAnswer) throw new Error('Bedrock retornou resposta vazia.');
