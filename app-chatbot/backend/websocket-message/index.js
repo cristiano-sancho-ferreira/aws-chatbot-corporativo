@@ -3,6 +3,7 @@
 const { randomUUID } = require('node:crypto');
 const {
   BedrockRuntimeClient,
+  ConverseCommand,
   ConverseStreamCommand,
 } = require('@aws-sdk/client-bedrock-runtime');
 const {
@@ -23,31 +24,59 @@ const historyTable   = process.env.CHAT_HISTORY_TABLE;
 const ordersTable    = process.env.ORDERS_TABLE;
 const summariesTable = process.env.SUMMARIES_TABLE;
 
-// Sliding window: quantas mensagens recentes carregamos do DynamoDB
-const HISTORY_LIMIT = 20;
+const HISTORY_LIMIT  = 20;
+const ORDERS_LIMIT   = 5;
+const TTL_SECONDS    = 60 * 60 * 24 * 30; // 30 dias
 
-// Quantos pedidos recentes incluímos no contexto
-const ORDERS_LIMIT = 5;
-
-// TTL: 30 dias
-const TTL_SECONDS = 60 * 60 * 24 * 30;
-
-// Palavras-chave que indicam intenção de consultar pedidos
-const ORDER_INTENT_PATTERN =
+const ORDER_QUERY_PATTERN =
   /\b(pedido|pedidos|compra|compras|pedi|último pedido|últimos pedidos|meu pedido|meus pedidos|status do pedido|minha compra|minhas compras|histórico)\b/i;
 
-const bedrock = new BedrockRuntimeClient({ region });
-const apiGateway = new ApiGatewayManagementApiClient({
-  endpoint: process.env.WS_CALLBACK_URL,
-});
-const dynamo = DynamoDBDocumentClient.from(new DynamoDBClient({ region }));
+const bedrock    = new BedrockRuntimeClient({ region });
+const apiGateway = new ApiGatewayManagementApiClient({ endpoint: process.env.WS_CALLBACK_URL });
+const dynamo     = DynamoDBDocumentClient.from(new DynamoDBClient({ region }));
+
+// ── Tool definitions para o Bedrock ──────────────────────────────────────────
+
+const TOOLS = [
+  {
+    toolSpec: {
+      name: 'registrar_pedido',
+      description:
+        'Registra um novo pedido de pizza no sistema quando o cliente confirmar explicitamente ' +
+        'o que deseja pedir. Use esta ferramenta SOMENTE após o cliente confirmar os itens do pedido. ' +
+        'Não use para consultas de pedidos anteriores.',
+      inputSchema: {
+        json: {
+          type: 'object',
+          required: ['itens'],
+          properties: {
+            itens: {
+              type: 'array',
+              description: 'Lista de itens do pedido',
+              items: {
+                type: 'object',
+                required: ['nome', 'quantidade'],
+                properties: {
+                  nome:        { type: 'string',  description: 'Nome do item (ex: Pizza Calabresa Grande)' },
+                  quantidade:  { type: 'integer', description: 'Quantidade' },
+                  preco_cents: { type: 'integer', description: 'Preço unitário em centavos (se conhecido)' },
+                  observacao:  { type: 'string',  description: 'Observações do item (ex: sem cebola)' },
+                },
+              },
+            },
+            observacao_geral: {
+              type: 'string',
+              description: 'Observação geral do pedido (ex: endereço de entrega, forma de pagamento)',
+            },
+          },
+        },
+      },
+    },
+  },
+];
 
 // ── DynamoDB helpers ──────────────────────────────────────────────────────────
 
-/**
- * Carrega as últimas HISTORY_LIMIT mensagens em ordem cronológica.
- * ScanIndexForward=false (mais recentes primeiro) + reverse = sliding window correto.
- */
 async function loadHistory(conversationId) {
   const result = await dynamo.send(
     new QueryCommand({
@@ -64,27 +93,19 @@ async function loadHistory(conversationId) {
   }));
 }
 
-/**
- * Lê o resumo gerado pela Lambda Processor, se existir.
- * Retorna null quando a conversa ainda não foi sumarizada.
- */
 async function loadSummary(conversationId) {
   if (!summariesTable) return null;
   try {
     const result = await dynamo.send(
-      new GetCommand({
-        TableName: summariesTable,
-        Key: { conversationId },
-      }),
+      new GetCommand({ TableName: summariesTable, Key: { conversationId } }),
     );
     return result.Item?.summary ?? null;
-  } catch (error) {
-    console.error('Falha ao carregar resumo:', error);
+  } catch (e) {
+    console.error('Falha ao carregar resumo:', e);
     return null;
   }
 }
 
-/** Persiste uma mensagem na tabela de histórico. */
 async function saveMessage({ conversationId, messageId, role, content }) {
   await dynamo.send(
     new PutCommand({
@@ -94,16 +115,14 @@ async function saveMessage({ conversationId, messageId, role, content }) {
         timestamp: new Date().toISOString(),
         messageId,
         role,
-        content,
+        // content pode ser string (texto simples) ou JSON (quando vem de toolUse/toolResult)
+        content: typeof content === 'string' ? content : JSON.stringify(content),
         ttl: Math.floor(Date.now() / 1000) + TTL_SECONDS,
       },
     }),
   );
 }
 
-/**
- * Carrega os últimos ORDERS_LIMIT pedidos do usuário via GSI order_by_date.
- */
 async function loadRecentOrders(userId) {
   if (!ordersTable || !userId) return [];
   try {
@@ -118,41 +137,69 @@ async function loadRecentOrders(userId) {
       }),
     );
     return result.Items ?? [];
-  } catch (error) {
-    console.error('Falha ao carregar pedidos:', error);
+  } catch (e) {
+    console.error('Falha ao carregar pedidos:', e);
     return [];
   }
 }
 
-/** Formata pedidos em texto legível para o system prompt. */
-function formatOrdersForContext(orders) {
-  if (!orders || orders.length === 0) {
-    return 'Nenhum pedido encontrado para este usuário.';
+/** Grava o pedido confirmado pelo Bedrock na tabela orders. */
+async function saveOrder({ userId, itens, observacaoGeral }) {
+  if (!ordersTable || !userId) {
+    return { sucesso: false, erro: 'Sistema de pedidos indisponível.' };
   }
+
+  const orderId   = randomUUID();
+  const createdAt = new Date().toISOString();
+
+  // Normaliza itens para o formato padrão da tabela
+  const itensMapped = itens.map((i) => ({
+    name:  i.nome,
+    qty:   i.quantidade,
+    price: i.preco_cents ?? 0,
+    ...(i.observacao ? { obs: i.observacao } : {}),
+  }));
+
+  const total = itensMapped.reduce((sum, i) => sum + (i.price * i.qty), 0);
+
+  try {
+    await dynamo.send(
+      new PutCommand({
+        TableName: ordersTable,
+        Item: {
+          userId,
+          orderId,
+          createdAt,
+          status: 'pendente',
+          items:  JSON.stringify(itensMapped),
+          total,
+          ...(observacaoGeral ? { observacao: observacaoGeral } : {}),
+          ttl: Math.floor(Date.now() / 1000) + TTL_SECONDS,
+        },
+      }),
+    );
+    return { sucesso: true, orderId, status: 'pendente', createdAt };
+  } catch (e) {
+    console.error('Falha ao salvar pedido:', e);
+    return { sucesso: false, erro: 'Não foi possível registrar o pedido. Tente novamente.' };
+  }
+}
+
+function formatOrdersForContext(orders) {
+  if (!orders || orders.length === 0) return 'Nenhum pedido encontrado para este usuário.';
   return orders
     .map((order, index) => {
       let itemsText = '';
       try {
-        const items =
-          typeof order.items === 'string' ? JSON.parse(order.items) : (order.items ?? []);
+        const items = typeof order.items === 'string' ? JSON.parse(order.items) : (order.items ?? []);
         itemsText = Array.isArray(items)
-          ? items
-              .map(
-                (i) =>
-                  `  - ${i.name ?? i}${i.qty ? ` (x${i.qty})` : ''}${
-                    i.price ? ` — R$ ${(i.price / 100).toFixed(2)}` : ''
-                  }`,
-              )
-              .join('\n')
+          ? items.map((i) =>
+              `  - ${i.name ?? i}${i.qty ? ` (x${i.qty})` : ''}${i.price ? ` — R$ ${(i.price / 100).toFixed(2)}` : ''}`,
+            ).join('\n')
           : String(items);
-      } catch {
-        itemsText = String(order.items ?? '');
-      }
-      const total =
-        typeof order.total === 'number'
-          ? `R$ ${(order.total / 100).toFixed(2)}`
-          : (order.total ?? 'não informado');
-      const date = order.createdAt
+      } catch { itemsText = String(order.items ?? ''); }
+      const total  = typeof order.total === 'number' ? `R$ ${(order.total / 100).toFixed(2)}` : (order.total ?? 'não informado');
+      const date   = order.createdAt
         ? new Date(order.createdAt).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })
         : 'data desconhecida';
       return `Pedido ${index + 1}:\n  ID: ${order.orderId ?? 'N/A'}\n  Data: ${date}\n  Status: ${order.status ?? 'não informado'}\n  Itens:\n${itemsText}\n  Total: ${total}`;
@@ -175,11 +222,7 @@ async function postToConnection(connectionId, payload) {
 
 function readBody(event) {
   if (typeof event.body !== 'string') return event.body;
-  try {
-    return JSON.parse(event.body);
-  } catch {
-    return null;
-  }
+  try { return JSON.parse(event.body); } catch { return null; }
 }
 
 function parseRequest(event) {
@@ -192,6 +235,87 @@ function parseRequest(event) {
   if (!content || content.length > 4000)
     throw new Error('A mensagem deve conter entre 1 e 4000 caracteres.');
   return { conversationId, content };
+}
+
+// ── Tool execution ────────────────────────────────────────────────────────────
+
+/**
+ * Executa a tool solicitada pelo Bedrock e retorna o resultado no formato
+ * esperado pelo ConverseCommand (toolResult block).
+ */
+async function executeTool(toolUseBlock, userId) {
+  const { toolUseId, name, input } = toolUseBlock;
+  console.log(`Tool chamada: ${name}`, JSON.stringify(input));
+
+  let result;
+  if (name === 'registrar_pedido') {
+    result = await saveOrder({
+      userId,
+      itens:            input.itens ?? [],
+      observacaoGeral:  input.observacao_geral ?? '',
+    });
+  } else {
+    result = { erro: `Tool desconhecida: ${name}` };
+  }
+
+  return {
+    role: 'user',
+    content: [{
+      toolResult: {
+        toolUseId,
+        content: [{ text: JSON.stringify(result) }],
+        status: result.sucesso === false ? 'error' : 'success',
+      },
+    }],
+  };
+}
+
+// ── Bedrock interaction ───────────────────────────────────────────────────────
+
+/**
+ * Primeira chamada ao Bedrock com ConverseCommand (suporta tool use).
+ * Se o modelo decidir usar uma tool, executa e faz uma segunda chamada.
+ * Retorna o histórico atualizado para o streaming final.
+ */
+async function runToolLoop(messages, systemPrompt, userId) {
+  const params = {
+    modelId,
+    system: [{ text: systemPrompt }],
+    messages,
+    toolConfig: { tools: TOOLS },
+    inferenceConfig: { maxTokens: 600, temperature: 0.2 },
+  };
+
+  const response = await bedrock.send(new ConverseCommand(params));
+  const stopReason = response.stopReason;
+  const assistantMessage = response.output?.message;
+
+  // Sem tool use — retorna direto o texto
+  if (stopReason !== 'tool_use') {
+    const text = assistantMessage?.content
+      ?.filter((b) => b.text)
+      .map((b) => b.text)
+      .join('') ?? '';
+    return { usedTool: false, finalText: text, updatedMessages: messages };
+  }
+
+  // Modelo pediu para usar uma tool
+  const toolUseBlock = assistantMessage?.content?.find((b) => b.toolUse);
+  if (!toolUseBlock) {
+    return { usedTool: false, finalText: '', updatedMessages: messages };
+  }
+
+  // Executa a tool passando o userId do usuário autenticado
+  const toolResultMessage = await executeTool(toolUseBlock.toolUse, userId);
+
+  // Monta o histórico com a resposta do assistente + resultado da tool
+  const updatedMessages = [
+    ...messages,
+    assistantMessage,          // resposta do Bedrock com toolUse
+    toolResultMessage,         // resultado da execução da tool
+  ];
+
+  return { usedTool: true, finalText: null, updatedMessages };
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -219,83 +343,111 @@ exports.handler = async (event) => {
   const { conversationId, content } = request;
   const userMessageId = randomUUID();
 
-  // 2. Persiste mensagem do usuário + carrega histórico e resumo em paralelo
+  // 2. Persiste mensagem + carrega histórico e resumo em paralelo
   const [, history, summary] = await Promise.all([
     saveMessage({ conversationId, messageId: userMessageId, role: 'user', content }).catch(
       (e) => console.error('Falha ao salvar msg do usuário:', e),
     ),
     loadHistory(conversationId).catch((e) => {
       console.error('Falha ao carregar histórico:', e);
-      return [{ role: 'user', content: [{ text: content }] }];
+      return [];
     }),
     loadSummary(conversationId),
   ]);
 
   // Garante que a mensagem atual está no histórico
-  const workingHistory = history.length > 0 ? history : [];
-  if (
-    workingHistory.length === 0 ||
-    workingHistory[workingHistory.length - 1].role !== 'user'
-  ) {
+  const workingHistory = [...history];
+  if (workingHistory.length === 0 || workingHistory[workingHistory.length - 1].role !== 'user') {
     workingHistory.push({ role: 'user', content: [{ text: content }] });
   }
 
-  // 3. Detecta intenção de pedidos e carrega dados se necessário
+  // 3. Consulta pedidos anteriores se houver intenção
   let ordersContext = '';
-  if (ORDER_INTENT_PATTERN.test(content) && userId) {
+  if (ORDER_QUERY_PATTERN.test(content) && userId) {
     const orders = await loadRecentOrders(userId);
-    ordersContext =
-      `\n\n--- PEDIDOS RECENTES DO USUÁRIO ---\n${formatOrdersForContext(orders)}\n--- FIM DOS PEDIDOS ---`;
-    console.log(`Intenção de pedido: userId=${userId}, ${orders.length} pedido(s).`);
+    ordersContext = `\n\n--- PEDIDOS RECENTES DO USUÁRIO ---\n${formatOrdersForContext(orders)}\n--- FIM DOS PEDIDOS ---`;
+    console.log(`Consulta de pedidos: userId=${userId}, ${orders.length} pedido(s).`);
   }
 
-  // 4. Monta system prompt com resumo (se existir) + contexto de pedidos
+  // 4. Monta system prompt
   const summaryBlock = summary
     ? `\n\nRESUMO DA CONVERSA ATÉ AGORA:\n${summary}\n(Use este resumo como contexto para as mensagens recentes abaixo.)`
     : '';
 
   const systemPrompt =
     'Você é um assistente virtual de uma pizzaria. Responda em português, com clareza e cordialidade. ' +
-    'Não invente itens de cardápio, preços, promoções ou status de pedidos; quando não tiver esses dados, explique que não tem acesso a eles.' +
+    'Quando o cliente confirmar explicitamente os itens que deseja pedir, use a tool registrar_pedido para registrar o pedido no sistema. ' +
+    'Não invente itens de cardápio, preços ou promoções; quando não tiver esses dados, explique que não tem acesso a eles.' +
     summaryBlock +
     (ordersContext
-      ? '\n\nOs dados reais dos pedidos do usuário estão listados abaixo — use-os para responder com precisão.' +
-        ordersContext
+      ? '\n\nOs dados reais dos pedidos do usuário estão listados abaixo — use-os para responder com precisão.' + ordersContext
       : '');
 
-  // 5. Invoca Bedrock com streaming (ConverseStreamCommand)
+  // 5. Rodada de tool use (ConverseCommand — suporta tools)
   const assistantMessageId = randomUUID();
+  let finalMessages = workingHistory;
+  let preComputedText = null;
+
+  try {
+    const { usedTool, finalText, updatedMessages } = await runToolLoop(
+      workingHistory,
+      systemPrompt,
+      userId,
+    );
+
+    finalMessages = updatedMessages;
+
+    if (!usedTool && finalText) {
+      // Modelo respondeu diretamente sem tool — usa esse texto no streaming
+      preComputedText = finalText;
+    }
+  } catch (error) {
+    console.error('Falha na rodada de tool use:', error);
+    await postToConnection(connectionId, {
+      type: 'error',
+      conversationId,
+      error: 'Não foi possível processar sua mensagem. Tente novamente.',
+    });
+    return { statusCode: 200 };
+  }
+
+  // 6. Streaming da resposta final
   let fullAnswer = '';
 
   try {
-    const streamResponse = await bedrock.send(
-      new ConverseStreamCommand({
-        modelId,
-        system: [{ text: systemPrompt }],
-        messages: workingHistory,
-        inferenceConfig: {
-          maxTokens: 500,
-          temperature: 0.2,
-        },
-      }),
-    );
+    if (preComputedText) {
+      // Já temos o texto (sem tool use) — envia direto como chunk único
+      fullAnswer = preComputedText;
+      await postToConnection(connectionId, {
+        type: 'chunk',
+        conversationId,
+        messageId: assistantMessageId,
+        content: fullAnswer,
+      });
+    } else {
+      // Após tool use — faz nova chamada com streaming para gerar resposta final
+      const streamResponse = await bedrock.send(
+        new ConverseStreamCommand({
+          modelId,
+          system: [{ text: systemPrompt }],
+          messages: finalMessages,
+          inferenceConfig: { maxTokens: 500, temperature: 0.2 },
+        }),
+      );
 
-    // Itera os eventos do stream — o SDK entrega objetos com uma única chave
-    // representando o tipo do evento (contentBlockDelta, messageStop, etc.)
-    for await (const event of streamResponse.stream) {
-      // Texto incremental do modelo
-      if (event.contentBlockDelta?.delta?.text) {
-        const text = event.contentBlockDelta.delta.text;
-        fullAnswer += text;
-        await postToConnection(connectionId, {
-          type: 'chunk',
-          conversationId,
-          messageId: assistantMessageId,
-          content: text,
-        });
+      for await (const evt of streamResponse.stream) {
+        if (evt.contentBlockDelta?.delta?.text) {
+          const text = evt.contentBlockDelta.delta.text;
+          fullAnswer += text;
+          await postToConnection(connectionId, {
+            type: 'chunk',
+            conversationId,
+            messageId: assistantMessageId,
+            content: text,
+          });
+        }
+        if (evt.messageStop) break;
       }
-      // Fim do stream
-      if (event.messageStop) break;
     }
 
     if (!fullAnswer) throw new Error('Bedrock retornou resposta vazia.');
@@ -309,14 +461,14 @@ exports.handler = async (event) => {
     return { statusCode: 200 };
   }
 
-  // 6. Persiste resposta completa do assistente + sinaliza done em paralelo
+  // 7. Persiste resposta do assistente + sinaliza done
   await Promise.all([
     saveMessage({
       conversationId,
       messageId: assistantMessageId,
       role: 'assistant',
       content: fullAnswer,
-    }).catch((e) => console.error('Falha ao salvar resposta do assistente:', e)),
+    }).catch((e) => console.error('Falha ao salvar resposta:', e)),
     postToConnection(connectionId, { type: 'done', conversationId }),
   ]);
 
