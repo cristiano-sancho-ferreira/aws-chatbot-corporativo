@@ -87,10 +87,28 @@ async function loadHistory(conversationId) {
       Limit: HISTORY_LIMIT,
     }),
   );
-  return (result.Items ?? []).reverse().map((item) => ({
-    role: item.role,
-    content: [{ text: item.content }],
-  }));
+
+  return (result.Items ?? []).reverse().flatMap((item) => {
+    // Tenta parsear como JSON array (mensagens com toolUse/toolResult salvas como JSON)
+    let parsedContent;
+    try {
+      const candidate = JSON.parse(item.content);
+      parsedContent = Array.isArray(candidate) ? candidate : null;
+    } catch {
+      parsedContent = null;
+    }
+
+    // Se tem blocos de tool use/result, descarta — o Bedrock rejeita esses blocos
+    // no histórico a menos que toolConfig seja idêntico ao da chamada original.
+    // O resumo gerado pelo Processor captura o conteúdo dessas trocas.
+    if (parsedContent) {
+      const hasToolBlocks = parsedContent.some((b) => b.toolUse || b.toolResult);
+      if (hasToolBlocks) return []; // descarta do histórico
+      return [{ role: item.role, content: parsedContent }];
+    }
+
+    return [{ role: item.role, content: [{ text: item.content }] }];
+  });
 }
 
 async function loadSummary(conversationId) {
@@ -425,28 +443,31 @@ exports.handler = async (event) => {
         content: fullAnswer,
       });
     } else {
-      // Após tool use — faz nova chamada com streaming para gerar resposta final
-      const streamResponse = await bedrock.send(
-        new ConverseStreamCommand({
+      // Após tool use — segunda chamada com toolConfig para o Bedrock gerar resposta final
+      // Usamos ConverseCommand (não stream) porque o histórico contém blocos toolUse/toolResult
+      // que o ConverseStreamCommand pode rejeitar dependendo do modelo.
+      const finalResponse = await bedrock.send(
+        new ConverseCommand({
           modelId,
           system: [{ text: systemPrompt }],
           messages: finalMessages,
+          toolConfig: { tools: TOOLS },
           inferenceConfig: { maxTokens: 500, temperature: 0.2 },
         }),
       );
 
-      for await (const evt of streamResponse.stream) {
-        if (evt.contentBlockDelta?.delta?.text) {
-          const text = evt.contentBlockDelta.delta.text;
-          fullAnswer += text;
-          await postToConnection(connectionId, {
-            type: 'chunk',
-            conversationId,
-            messageId: assistantMessageId,
-            content: text,
-          });
-        }
-        if (evt.messageStop) break;
+      fullAnswer = finalResponse.output?.message?.content
+        ?.filter((b) => b.text)
+        .map((b) => b.text)
+        .join('') ?? '';
+
+      if (fullAnswer) {
+        await postToConnection(connectionId, {
+          type: 'chunk',
+          conversationId,
+          messageId: assistantMessageId,
+          content: fullAnswer,
+        });
       }
     }
 
