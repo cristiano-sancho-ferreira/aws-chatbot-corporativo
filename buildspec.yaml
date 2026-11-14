@@ -8,7 +8,7 @@ phases:
       - export TF_MODULE="app-chatbot"  
       - export TF_VERSION="1.15.9"
       - export ENV="prd"
-      - export TF_COMMAND="apply" 
+      - export TF_COMMAND="destroy" 
       - export TF_ORG="chatbot"
       
       - echo "=== Configuracao ==="
